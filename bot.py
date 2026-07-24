@@ -1,0 +1,284 @@
+import asyncio
+import re
+import discord
+from datetime import timedelta
+from discord.ext import commands
+
+# ==========================
+# BOT SETUP
+# ==========================
+
+intents = discord.Intents.default()
+intents.message_content = True
+intents.members = True
+intents.voice_states = True
+
+bot = commands.Bot(command_prefix="!", intents=intents)
+
+# ==========================
+# SETTINGS
+# ==========================
+
+BAD_WORDS = [
+    "rab",
+    "omik",
+    "o5tek"
+]
+
+LOG_CHANNEL_NAME = "logs"
+
+warnings = {}
+last_voice_channel = {}
+manual_leave = set()
+
+INVITE_REGEX = re.compile(
+    r"(https?://)?(www\.)?(discord\.gg|discord\.com/invite|discord\.app/invite)/\S+",
+    re.I
+)
+
+# ==========================
+# READY
+# ==========================
+
+@bot.event
+async def on_ready():
+    print(f"Logged in as {bot.user}")
+
+# ==========================
+# WRITE
+# ==========================
+
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def write(ctx, *, message):
+    await ctx.message.delete()
+    await ctx.send(message)
+
+# ==========================
+# JOIN VC
+# ==========================
+
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def join(ctx):
+    if not ctx.author.voice:
+        return await ctx.send("❌ Join a voice channel first.")
+
+    channel = ctx.author.voice.channel
+
+    if ctx.voice_client:
+        await ctx.voice_client.move_to(channel)
+    else:
+        await channel.connect()
+
+    last_voice_channel[ctx.guild.id] = channel
+
+    await ctx.send(f"✅ Joined **{channel.name}**")
+
+# ==========================
+# LEAVE VC
+# ==========================
+
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def leave(ctx):
+    if ctx.voice_client:
+        manual_leave.add(ctx.guild.id)
+        await ctx.voice_client.disconnect()
+        await ctx.send("👋 Left voice channel.")
+
+# ==========================
+# AUTO RECONNECT
+# ==========================
+
+@bot.event
+async def on_voice_state_update(member, before, after):
+
+    if member.id != bot.user.id:
+        return
+
+    guild = member.guild
+
+    # Save last channel
+    if after.channel:
+        last_voice_channel[guild.id] = after.channel
+        return
+
+    # Don't reconnect if !leave was used
+    if guild.id in manual_leave:
+        manual_leave.remove(guild.id)
+        return
+
+    # Reconnect after disconnect
+    if before.channel and guild.id in last_voice_channel:
+
+        await asyncio.sleep(2)
+
+        try:
+            if guild.voice_client is None:
+                await last_voice_channel[guild.id].connect()
+                print("Reconnected.")
+        except Exception as e:
+            print(e)
+
+# ==========================
+# WARNINGS
+# ==========================
+
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def reset_warnings(ctx, member: discord.Member):
+    warnings[member.id] = 0
+    await ctx.send("✅ Warnings reset.")
+
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def check_warnings(ctx, member: discord.Member):
+    await ctx.send(
+        f"{member.mention} has **{warnings.get(member.id,0)}/3** warnings."
+    )
+
+# ==========================
+# BAD WORDS
+# ==========================
+
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def add_bad_word(ctx, word: str):
+
+    word = word.lower()
+
+    if word not in BAD_WORDS:
+        BAD_WORDS.append(word)
+
+    await ctx.send(f"✅ Added `{word}`")
+
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def remove_bad_word(ctx, word: str):
+
+    word = word.lower()
+
+    if word in BAD_WORDS:
+        BAD_WORDS.remove(word)
+        await ctx.send(f"✅ Removed `{word}`")
+    else:
+        await ctx.send("❌ Word not found.")
+
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def show_bad_words(ctx):
+
+    if not BAD_WORDS:
+        return await ctx.send("No bad words.")
+
+    await ctx.send("\n".join(BAD_WORDS))
+
+# ==========================
+# MESSAGE FILTER
+# ==========================
+
+@bot.event
+async def on_message(message):
+
+    if message.author.bot:
+        return
+
+    if not message.guild:
+        return await bot.process_commands(message)
+
+    if not message.author.guild_permissions.administrator:
+
+        content = message.content.lower()
+
+        # Discord Invite
+        if INVITE_REGEX.search(content):
+
+            await message.delete()
+
+            await message.author.timeout(
+                timedelta(minutes=1),
+                reason="Discord Invite"
+            )
+
+            return
+
+        # Bad Words
+        for word in BAD_WORDS:
+
+            if word in content:
+
+                await message.delete()
+
+                warnings[message.author.id] = warnings.get(
+                    message.author.id, 0
+                ) + 1
+
+                log = discord.utils.get(
+                    message.guild.text_channels,
+                    name=LOG_CHANNEL_NAME
+                )
+
+                if log:
+                    await log.send(
+                        f"⚠️ {message.author.mention} used `{word}` "
+                        f"({warnings[message.author.id]}/3)"
+                    )
+
+                if warnings[message.author.id] >= 3:
+
+                    await message.author.timeout(
+                        timedelta(minutes=10),
+                        reason="3 Bad Words"
+                    )
+
+                    warnings[message.author.id] = 0
+
+                return
+
+    await bot.process_commands(message)
+import os
+import discord
+from discord.ext import commands
+from flask import Flask
+from threading import Thread
+
+# ====== Flask Web Server (Keep-Alive) ======
+app = Flask('')
+
+@app.route('/')
+def home():
+    return "Bot is alive!"
+
+def run():
+    app.run(host='0.0.0.0', port=8080)
+
+def keep_alive():
+    t = Thread(target=run)
+    t.start()
+# ===========================================
+
+# ====== تحديد الصلاحيات (Intents) ======
+intents = discord.Intents.default()
+intents.message_content = True  # باش البوت يقرا محتوى الرسائل
+intents.members = True          # باش البوت يشوف الأعضاء (اختياري)
+# =====================================
+
+# ====== إنشاء البوت مع الصلاحيات ======
+bot = commands.Bot(command_prefix="!", intents=intents)
+
+@bot.event
+async def on_ready():
+    print(f'Bot is ready! Logged in as {bot.user}')
+
+@bot.command()
+async def hello(ctx):
+    await ctx.send(f'Hello {ctx.author.mention}!')
+
+TOKEN = os.getenv('DISCORD_TOKEN')
+if TOKEN is None:
+    print("Error: DISCORD_TOKEN not found!")
+    exit()
+
+keep_alive()  # إبدأ تشغيل الـ Web Server
+bot.run(TOKEN)  # إبدأ تشغيل البوت
