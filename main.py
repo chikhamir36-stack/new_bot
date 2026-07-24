@@ -1,30 +1,12 @@
-import subprocess
-import sys
-import os
-
-# ==========================
-# تثبيت المكتبات تلقائياً (حل مشكلة Render)
-# ==========================
-try:
-    import discord
-except ImportError:
-    print("📦 Installing discord.py...")
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", "discord.py", "flask"])
-    print("✅ Installation complete!")
-
 import asyncio
 import re
+import os
+import sys
 import discord
 from datetime import timedelta
 from discord.ext import commands
 from flask import Flask
 from threading import Thread
-
-# ==========================
-# التحقق من البيئة
-# ==========================
-print(f"🐍 Python version: {sys.version}")
-print(f"📁 Current directory: {os.getcwd()}")
 
 # ==========================
 # FLASK KEEP-ALIVE
