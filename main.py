@@ -38,6 +38,11 @@ intents.voice_states = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 # ==========================
+# OWNER ID (حطينا الـ ID حقك)
+# ==========================
+bot.owner_id = 1454256976048558240  # الـ ID حقك
+
+# ==========================
 # SETTINGS
 # ==========================
 BAD_WORDS = ["rab", "omik", "o5tek"]
@@ -59,28 +64,29 @@ async def on_ready():
     print(f"✅ Logged in as {bot.user}")
     print(f"✅ Bot is ready!")
     print(f"✅ Connected to {len(bot.guilds)} guilds")
+    print(f"👑 Owner ID: {bot.owner_id}")
 
 # ==========================
-# HELLO COMMAND
+# HELLO COMMAND (مفتوح للجميع)
 # ==========================
 @bot.command()
 async def hello(ctx):
     await ctx.send(f'👋 Hello {ctx.author.mention}!')
 
 # ==========================
-# WRITE COMMAND
+# WRITE COMMAND (للمالك فقط)
 # ==========================
 @bot.command()
-@commands.has_permissions(administrator=True)
+@commands.is_owner()
 async def write(ctx, *, message):
     await ctx.message.delete()
     await ctx.send(message)
 
 # ==========================
-# VOICE COMMANDS
+# VOICE COMMANDS (للمالك فقط)
 # ==========================
 @bot.command()
-@commands.has_permissions(administrator=True)
+@commands.is_owner()
 async def join(ctx):
     if not ctx.author.voice:
         return await ctx.send("❌ Join a voice channel first.")
@@ -93,7 +99,7 @@ async def join(ctx):
     await ctx.send(f"✅ Joined **{channel.name}**")
 
 @bot.command()
-@commands.has_permissions(administrator=True)
+@commands.is_owner()
 async def leave(ctx):
     if ctx.voice_client:
         manual_leave.add(ctx.guild.id)
@@ -124,26 +130,26 @@ async def on_voice_state_update(member, before, after):
             print(f"❌ Reconnect error: {e}")
 
 # ==========================
-# WARNINGS
+# WARNINGS (للمالك فقط)
 # ==========================
 @bot.command()
-@commands.has_permissions(administrator=True)
+@commands.is_owner()
 async def reset_warnings(ctx, member: discord.Member):
     warnings[member.id] = 0
     await ctx.send("✅ Warnings reset.")
 
 @bot.command()
-@commands.has_permissions(administrator=True)
+@commands.is_owner()
 async def check_warnings(ctx, member: discord.Member):
     await ctx.send(
         f"{member.mention} has **{warnings.get(member.id,0)}/3** warnings."
     )
 
 # ==========================
-# BAD WORDS MANAGEMENT
+# BAD WORDS MANAGEMENT (للمالك فقط)
 # ==========================
 @bot.command()
-@commands.has_permissions(administrator=True)
+@commands.is_owner()
 async def add_bad_word(ctx, word: str):
     word = word.lower()
     if word not in BAD_WORDS:
@@ -151,7 +157,7 @@ async def add_bad_word(ctx, word: str):
     await ctx.send(f"✅ Added `{word}`")
 
 @bot.command()
-@commands.has_permissions(administrator=True)
+@commands.is_owner()
 async def remove_bad_word(ctx, word: str):
     word = word.lower()
     if word in BAD_WORDS:
@@ -161,7 +167,7 @@ async def remove_bad_word(ctx, word: str):
         await ctx.send("❌ Word not found.")
 
 @bot.command()
-@commands.has_permissions(administrator=True)
+@commands.is_owner()
 async def show_bad_words(ctx):
     if not BAD_WORDS:
         return await ctx.send("No bad words.")
