@@ -1,24 +1,41 @@
 import asyncio
 import re
+import os
 import discord
 from datetime import timedelta
 from discord.ext import commands
+from flask import Flask
+from threading import Thread
 
 # ==========================
-# BOT SETUP
+# FLASK KEEP-ALIVE
 # ==========================
+app = Flask('')
 
+@app.route('/')
+def home():
+    return "Bot is alive!"
+
+def run():
+    app.run(host='0.0.0.0', port=8080)
+
+def keep_alive():
+    t = Thread(target=run)
+    t.start()
+
+# ==========================
+# BOT SETUP (تعريف واحد فقط)
+# ==========================
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 intents.voice_states = True
 
-bot = commands.Bot(command_prefix="!", intents=intents)
+bot = commands.Bot(command_prefix="!", intents=intents)  # ✅ تعريف واحد فقط
 
 # ==========================
 # SETTINGS
 # ==========================
-
 BAD_WORDS = [
     "rab",
     "omik",
@@ -39,7 +56,6 @@ INVITE_REGEX = re.compile(
 # ==========================
 # READY
 # ==========================
-
 @bot.event
 async def on_ready():
     print(f"Logged in as {bot.user}")
@@ -47,7 +63,6 @@ async def on_ready():
 # ==========================
 # WRITE
 # ==========================
-
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def write(ctx, *, message):
@@ -57,7 +72,6 @@ async def write(ctx, *, message):
 # ==========================
 # JOIN VC
 # ==========================
-
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def join(ctx):
@@ -78,7 +92,6 @@ async def join(ctx):
 # ==========================
 # LEAVE VC
 # ==========================
-
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def leave(ctx):
@@ -90,30 +103,23 @@ async def leave(ctx):
 # ==========================
 # AUTO RECONNECT
 # ==========================
-
 @bot.event
 async def on_voice_state_update(member, before, after):
-
     if member.id != bot.user.id:
         return
 
     guild = member.guild
 
-    # Save last channel
     if after.channel:
         last_voice_channel[guild.id] = after.channel
         return
 
-    # Don't reconnect if !leave was used
     if guild.id in manual_leave:
         manual_leave.remove(guild.id)
         return
 
-    # Reconnect after disconnect
     if before.channel and guild.id in last_voice_channel:
-
         await asyncio.sleep(2)
-
         try:
             if guild.voice_client is None:
                 await last_voice_channel[guild.id].connect()
@@ -124,7 +130,6 @@ async def on_voice_state_update(member, before, after):
 # ==========================
 # WARNINGS
 # ==========================
-
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def reset_warnings(ctx, member: discord.Member):
@@ -141,24 +146,18 @@ async def check_warnings(ctx, member: discord.Member):
 # ==========================
 # BAD WORDS
 # ==========================
-
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def add_bad_word(ctx, word: str):
-
     word = word.lower()
-
     if word not in BAD_WORDS:
         BAD_WORDS.append(word)
-
     await ctx.send(f"✅ Added `{word}`")
 
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def remove_bad_word(ctx, word: str):
-
     word = word.lower()
-
     if word in BAD_WORDS:
         BAD_WORDS.remove(word)
         await ctx.send(f"✅ Removed `{word}`")
@@ -168,19 +167,15 @@ async def remove_bad_word(ctx, word: str):
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def show_bad_words(ctx):
-
     if not BAD_WORDS:
         return await ctx.send("No bad words.")
-
     await ctx.send("\n".join(BAD_WORDS))
 
 # ==========================
 # MESSAGE FILTER
 # ==========================
-
 @bot.event
 async def on_message(message):
-
     if message.author.bot:
         return
 
@@ -188,28 +183,19 @@ async def on_message(message):
         return await bot.process_commands(message)
 
     if not message.author.guild_permissions.administrator:
-
         content = message.content.lower()
 
-        # Discord Invite
         if INVITE_REGEX.search(content):
-
             await message.delete()
-
             await message.author.timeout(
                 timedelta(minutes=1),
                 reason="Discord Invite"
             )
-
             return
 
-        # Bad Words
         for word in BAD_WORDS:
-
             if word in content:
-
                 await message.delete()
-
                 warnings[message.author.id] = warnings.get(
                     message.author.id, 0
                 ) + 1
@@ -226,59 +212,30 @@ async def on_message(message):
                     )
 
                 if warnings[message.author.id] >= 3:
-
                     await message.author.timeout(
                         timedelta(minutes=10),
                         reason="3 Bad Words"
                     )
-
                     warnings[message.author.id] = 0
 
                 return
 
     await bot.process_commands(message)
-import os
-import discord
-from discord.ext import commands
-from flask import Flask
-from threading import Thread
 
-# ====== Flask Web Server (Keep-Alive) ======
-app = Flask('')
-
-@app.route('/')
-def home():
-    return "Bot is alive!"
-
-def run():
-    app.run(host='0.0.0.0', port=8080)
-
-def keep_alive():
-    t = Thread(target=run)
-    t.start()
-# ===========================================
-
-# ====== تحديد الصلاحيات (Intents) ======
-intents = discord.Intents.default()
-intents.message_content = True  # باش البوت يقرا محتوى الرسائل
-intents.members = True          # باش البوت يشوف الأعضاء (اختياري)
-# =====================================
-
-# ====== إنشاء البوت مع الصلاحيات ======
-bot = commands.Bot(command_prefix="!", intents=intents)
-
-@bot.event
-async def on_ready():
-    print(f'Bot is ready! Logged in as {bot.user}')
-
+# ==========================
+# Hello Command (إضافة أمر ترحيبي)
+# ==========================
 @bot.command()
 async def hello(ctx):
     await ctx.send(f'Hello {ctx.author.mention}!')
 
+# ==========================
+# RUN BOT
+# ==========================
 TOKEN = os.getenv('DISCORD_TOKEN')
 if TOKEN is None:
     print("Error: DISCORD_TOKEN not found!")
     exit()
 
-keep_alive()  # إبدأ تشغيل الـ Web Server
-bot.run(TOKEN)  # إبدأ تشغيل البوت
+keep_alive()  # تشغيل Flask
+bot.run(TOKEN)  # تشغيل البوت
