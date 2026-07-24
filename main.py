@@ -333,7 +333,9 @@ async def on_message(message):
                     warnings[message.author.id] = 0
                 return
     await bot.process_commands(message)
-
+@bot.command()
+async def testvoice(ctx):
+    await ctx.send(f"voice={ctx.author.voice}")
 # ==========================
 # RUN BOT
 # ==========================
