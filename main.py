@@ -96,16 +96,16 @@ async def write(ctx, *, message):
 @bot.command()
 @commands.is_owner()
 async def joinvc(ctx):
-    """الدخول إلى الروم الصوتي"""
+    """اjoin voice channel """
     if not ctx.author.voice:
-        return await ctx.send("❌ أنت لست في روم صوتي!")
+        return await ctx.send("❌ you are not in voice channel!")
     channel = ctx.author.voice.channel
     if ctx.voice_client:
         await ctx.voice_client.move_to(channel)
     else:
         await channel.connect()
     last_voice_channel[ctx.guild.id] = channel
-    await ctx.send(f"✅ تم الدخول إلى **{channel.name}**")
+    await ctx.send(f"✅ i am in voice channel **{channel.name}**")
 
 @bot.command()
 @commands.is_owner()
@@ -114,7 +114,7 @@ async def leavevc(ctx):
     if ctx.voice_client:
         manual_leave.add(ctx.guild.id)
         await ctx.voice_client.disconnect()
-        await ctx.send("👋 تم الخروج من الروم الصوتي.")
+        await ctx.send("👋 5rajt mel voice .")
 
 # ==========================
 # VOICE STATE UPDATE
@@ -148,13 +148,13 @@ async def reset_warnings(ctx, member: discord.Member):
     warnings[member.id] = 0
     if member.id in warn_reasons:
         warn_reasons[member.id] = []
-    await ctx.send(f"✅ تم إعادة ضبط التحذيرات لـ {member.mention}.")
+    await ctx.send(f"✅warning restarted ـ {member.mention}.")
 
 @bot.command()
 @commands.is_owner()
 async def check_warnings(ctx, member: discord.Member):
     await ctx.send(
-        f"{member.mention} عنده **{warnings.get(member.id,0)}/3** تحذيرات."
+        f"{member.mention} you have  **{warnings.get(member.id,0)}/3** warn."
     )
 
 # ==========================
@@ -166,7 +166,7 @@ async def add_bad_word(ctx, word: str):
     word = word.lower()
     if word not in BAD_WORDS:
         BAD_WORDS.append(word)
-    await ctx.send(f"✅ تم إضافة `{word}`")
+    await ctx.send(f"✅ added `{word}`")
 
 @bot.command()
 @commands.is_owner()
@@ -174,15 +174,15 @@ async def remove_bad_word(ctx, word: str):
     word = word.lower()
     if word in BAD_WORDS:
         BAD_WORDS.remove(word)
-        await ctx.send(f"✅ تم حذف `{word}`")
+        await ctx.send(f"✅ removed `{word}`")
     else:
-        await ctx.send("❌ الكلمة غير موجودة.")
+        await ctx.send("❌ mehech mawjouda lkelma .")
 
 @bot.command()
 @commands.is_owner()
 async def show_bad_words(ctx):
     if not BAD_WORDS:
-        return await ctx.send("لا توجد كلمات ممنوعة.")
+        return await ctx.send("mafamech bad words .")
     await ctx.send("\n".join(BAD_WORDS))
 
 # ==========================
@@ -192,12 +192,12 @@ async def show_bad_words(ctx):
 # 1️⃣ أمر !avatar
 @bot.command()
 async def avatar(ctx, member: discord.Member = None):
-    """يعرض صورة البروفايل لعضو"""
+    """photo de profiel"""
     if member is None:
         member = ctx.author
     
     embed = discord.Embed(
-        title=f"🖼️ صورة {member.display_name}",
+        title=f"🖼️ photo {member.display_name}",
         color=discord.Color.blue()
     )
     embed.set_image(url=member.display_avatar.url)
@@ -211,18 +211,18 @@ async def avatar(ctx, member: discord.Member = None):
 async def clear(ctx, amount: int):
     """يحذف عدد محدد من الرسائل"""
     if amount < 1:
-        return await ctx.send("❌ الرقم يجب أن يكون أكبر من 0.")
+        return await ctx.send("❌ اlezim akther men 0 .")
     
     if amount > 100:
-        return await ctx.send("❌ لا يمكن حذف أكثر من 100 رسالة.")
+        return await ctx.send("❌ matnagamch tfasa5 akther mel 100 msg.")
     
     deleted = await ctx.channel.purge(limit=amount + 1)
-    await ctx.send(f"✅ تم حذف {len(deleted) - 1} رسائل.", delete_after=3)
+    await ctx.send(f"✅ removed {len(deleted) - 1} words .", delete_after=3)
 
 # 3️⃣ أمر !warn
 @bot.command()
 @commands.is_owner()
-async def warn(ctx, member: discord.Member, *, reason: str = "لا يوجد سبب"):
+async def warn(ctx, member: discord.Member, *, reason: str = "without reason"):
     """يحذر عضو مع سبب"""
     # زيادة عدد التحذيرات
     warnings[member.id] = warnings.get(member.id, 0) + 1
@@ -238,27 +238,27 @@ async def warn(ctx, member: discord.Member, *, reason: str = "لا يوجد سب
     
     # إرسال تحذير خاص للعضو
     try:
-        await member.send(f"⚠️ تم تحذيرك في **{ctx.guild.name}**\nالسبب: {reason}\nالتحذيرات: {warnings[member.id]}/3")
+        await member.send(f"⚠️ twarnit fel **{ctx.guild.name}**\reason: {reason}\nworns: {warnings[member.id]}/3")
     except:
         pass
     
     # إرسال رسالة في الشات
     embed = discord.Embed(
-        title="⚠️ تحذير",
-        description=f"{member.mention} تم تحذيره!",
+        title="⚠️warn",
+        description=f"{member.mention}you have ben warned !",
         color=discord.Color.orange()
     )
-    embed.add_field(name="السبب", value=reason, inline=False)
-    embed.add_field(name="التحذيرات", value=f"{warnings[member.id]}/3", inline=True)
-    embed.add_field(name="المشرف", value=ctx.author.mention, inline=True)
+    embed.add_field(name="reason", value=reason, inline=False)
+    embed.add_field(name="warns", value=f"{warnings[member.id]}/3", inline=True)
+    embed.add_field(name="اhost", value=ctx.author.mention, inline=True)
     embed.set_footer(text=f"ID: {member.id}")
     
     await ctx.send(embed=embed)
     
     # إذا وصل لـ 3 تحذيرات، يتم تكميمه
     if warnings[member.id] >= 3:
-        await member.timeout(timedelta(minutes=10), reason="3 تحذيرات")
-        await ctx.send(f"🔇 {member.mention} تم تكميمه لمدة 10 دقائق (3 تحذيرات).")
+        await member.timeout(timedelta(minutes=10), reason="3 warns ")
+        await ctx.send(f"🔇 {member.mention} 3andek timeout 10 .")
         warnings[member.id] = 0  # إعادة ضبط التحذيرات
 
 # 4️⃣ أمر !warnings
@@ -269,19 +269,19 @@ async def warnings(ctx, member: discord.Member):
     count = warnings.get(member.id, 0)
     
     embed = discord.Embed(
-        title=f"⚠️ تحذيرات {member.display_name}",
+        title=f"⚠️ warns {member.display_name}",
         color=discord.Color.blue()
     )
-    embed.add_field(name="مجموع التحذيرات", value=f"{count}/3", inline=False)
+    embed.add_field(name="3dad el worns ", value=f"{count}/3", inline=False)
     
     # عرض أسباب التحذيرات
     if member.id in warn_reasons and warn_reasons[member.id]:
         reasons_text = ""
         for i, warn_data in enumerate(warn_reasons[member.id], 1):
-            reasons_text += f"**{i}.** {warn_data['reason']} (بواسطة <@{warn_data['by']}> في {warn_data['time']})\n"
-        embed.add_field(name="الأسباب", value=reasons_text, inline=False)
+            reasons_text += f"**{i}.** {warn_data['reason']} (by <@{warn_data['by']}> في {warn_data['time']})\n"
+        embed.add_field(name="reasons", value=reasons_text, inline=False)
     else:
-        embed.add_field(name="الأسباب", value="لا توجد تحذيرات مسجلة.", inline=False)
+        embed.add_field(name="reasons", value="mafamech warsة.", inline=False)
     
     embed.set_footer(text=f"ID: {member.id}")
     
@@ -338,23 +338,23 @@ async def giveaway(ctx,
     # بناء Embed
     embed = discord.Embed(
         title=f"🎉 سحب: {prize}",
-        description=description or "تفاعل بـ 🎉 للمشاركة!",
+        description=description or "react bech joini lil giveways  🎉 !",
         color=discord.Color.gold(),
         timestamp=end_time
     )
     
-    embed.add_field(name="🏆 الفائزون", value=f"{winners}", inline=True)
-    embed.add_field(name="⏰ ينتهي", value=f"<t:{int(end_time.timestamp())}:R>", inline=True)
-    embed.add_field(name="📩 الدعوات المطلوبة", value=f"{invites}", inline=True)
+    embed.add_field(name="🏆winners", value=f"{winners}", inline=True)
+    embed.add_field(name="⏰ ended", value=f"<t:{int(end_time.timestamp())}:R>", inline=True)
+    embed.add_field(name="📩invites ", value=f"{invites}", inline=True)
     
     if image:
         embed.set_image(url=image)
     
-    embed.set_footer(text=f"تم النشر بواسطة {ctx.author.display_name}")
+    embed.set_footer(text=f"tpartaga b  {ctx.author.display_name}")
     
     # إرسال رسالة السحب
     message = await channel.send(
-        content="🎉 **سحب جديد!** تفاعل بـ 🎉 للمشاركة",
+        content="🎉 **new giveways react to join ",
         embed=embed
     )
     
@@ -385,7 +385,7 @@ async def giveaway(ctx,
     with open("giveaways.json", "w") as f:
         json.dump(giveaways, f)
     
-    await ctx.send(f"✅ تم بدء السحب في {channel.mention}!")
+    await ctx.send(f"✅ giveways started  {channel.mention}!")
     
     # جدولة إنهاء السحب
     await asyncio.sleep(duration_seconds)
@@ -403,7 +403,7 @@ async def end_giveaway(message, data):
     # جلب المشاركين
     reaction = discord.utils.get(message.reactions, emoji="🎉")
     if not reaction:
-        return await message.channel.send("❌ لا يوجد تفاعلات على السحب!")
+        return await message.channel.send("❌mafamech members!")
     
     users = await reaction.users().flatten()
     participants = [user for user in users if not user.bot]
@@ -417,11 +417,11 @@ async def end_giveaway(message, data):
     
     if len(eligible) == 0:
         embed = discord.Embed(
-            title=f"❌ انتهى السحب: {data['prize']}",
-            description="لا يوجد مشاركون مؤهلون!",
+            title=f"❌ giveways ended: {data['prize']}",
+            description="mafamech members!",
             color=discord.Color.red()
         )
-        return await message.edit(content="❌ **انتهى السحب بدون فائزين**", embed=embed)
+        return await message.edit(content="❌ **giveways ended without winners**", embed=embed)
     
     # اختيار الفائزين
     selected = random.sample(eligible, min(data["winners"], len(eligible)))
@@ -437,17 +437,17 @@ async def end_giveaway(message, data):
         embed.set_image(url=data["image"])
     
     # إرسال النتيجة
-    await message.edit(content="✅ **انتهى السحب!**", embed=embed)
+    await message.edit(content="✅ **giveways ended!**", embed=embed)
     
     # إرسال إشعار للفائزين
     winners_mentions = " ".join([f"<@{u.id}>" for u in selected])
     await message.channel.send(
-        content=f"🎉 **مبروك للفائزين!** {winners_mentions}\n"
+        content=f"🎉 **Congrats!** {winners_mentions}\n"
                 f"الجائزة: **{data['prize']}**\n"
-                f"تواصل مع <@{data['host_id']}> للحصول على جائزتك!",
+                f"contact <@{data['host_id']}> bech te5idh remords !",
         embed=discord.Embed(
-            title="🎊 ألف مبروك!",
-            description=f"لقد فزت بـ **{data['prize']}**!",
+            title="🎊 Congrats!",
+            description=f"you won**{data['prize']}**!",
             color=discord.Color.gold()
         )
     )
@@ -471,21 +471,21 @@ async def reroll(ctx, message_id: int):
     try:
         message = await ctx.channel.fetch_message(message_id)
     except:
-        return await ctx.send("❌ لم أجد الرسالة!")
+        return await ctx.send("❌mal9inech msg !")
     
     reaction = discord.utils.get(message.reactions, emoji="🎉")
     if not reaction:
-        return await ctx.send("❌ لا يوجد تفاعلات على هذه الرسالة!")
+        return await ctx.send("❌mafamech reaction!")
     
     users = await reaction.users().flatten()
     participants = [user for user in users if not user.bot]
     
     if len(participants) == 0:
-        return await ctx.send("❌ لا يوجد مشاركين!")
+        return await ctx.send("❌mafamech members!")
     
     # اختيار فائز واحد عشوائي
     winner = random.choice(participants)
-    await ctx.send(f"🎉 الفائز الجديد هو: {winner.mention}")
+    await ctx.send(f"🎉the new winner is : {winner.mention}")
 
 @bot.command()
 async def giveaway_info(ctx, message_id: int):
@@ -494,7 +494,7 @@ async def giveaway_info(ctx, message_id: int):
     try:
         message = await ctx.channel.fetch_message(message_id)
     except:
-        return await ctx.send("❌ لم أجد الرسالة!")
+        return await ctx.send("❌ mal9itech mdg!")
     
     # قراءة البيانات من الملف
     try:
@@ -503,22 +503,22 @@ async def giveaway_info(ctx, message_id: int):
         
         data = giveaways.get(str(message_id))
         if not data:
-            return await ctx.send("❌ هذا ليس سحباً مسجلاً!")
+            return await ctx.send("❌mahouch msegil اً!")
         
         embed = discord.Embed(
             title=f"📊 معلومات السحب",
             color=discord.Color.blue()
         )
-        embed.add_field(name="🎁 الجائزة", value=data['prize'], inline=False)
-        embed.add_field(name="🏆 الفائزون", value=data['winners'], inline=True)
-        embed.add_field(name="📩 الدعوات المطلوبة", value=data.get('invites_required', 0), inline=True)
-        embed.add_field(name="⏰ ينتهي", value=f"<t:{int(data['end_time'])}:R>", inline=True)
-        embed.add_field(name="👤 الناشر", value=f"<@{data['host_id']}>", inline=True)
+        embed.add_field(name="🎁 rewords", value=data['prize'], inline=False)
+        embed.add_field(name="🏆 winners", value=data['winners'], inline=True)
+        embed.add_field(name="📩 invits", value=data.get('invites_required', 0), inline=True)
+        embed.add_field(name="⏰ ended", value=f"<t:{int(data['end_time'])}:R>", inline=True)
+        embed.add_field(name="👤 host", value=f"<@{data['host_id']}>", inline=True)
         
         await ctx.send(embed=embed)
         
     except:
-        await ctx.send("❌ لا توجد بيانات لهذا السحب!")
+        await ctx.send("❌mafamech giveways!!")
 
 @bot.command()
 @commands.is_owner()
@@ -530,24 +530,24 @@ async def giveaways_list(ctx):
             giveaways = json.load(f)
         
         if not giveaways:
-            return await ctx.send("❌ لا توجد سحوبات نشطة!")
+            return await ctx.send("❌mafamech giveways!")
         
         embed = discord.Embed(
-            title="🎉 السحوبات النشطة",
+            title="🎉 giveways",
             color=discord.Color.blue()
         )
         
         for message_id, data in giveaways.items():
             embed.add_field(
                 name=f"🎁 {data['prize']}",
-                value=f"ID: `{message_id}`\nالفائزون: {data['winners']}\nينتهي: <t:{int(data['end_time'])}:R>",
+                value=f"ID: `{message_id}`\nwinners: {data['winners']}\nended: <t:{int(data['end_time'])}:R>",
                 inline=False
             )
         
         await ctx.send(embed=embed)
         
     except:
-        await ctx.send("❌ لا توجد سحوبات نشطة!")
+        await ctx.send("❌mafamech giveways!")
 
 # ==========================
 # MESSAGE FILTER
