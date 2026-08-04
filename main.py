@@ -3,8 +3,8 @@ import re
 import os
 import sys
 import discord
-from datetime import timedelta
-from discord.ext import commands
+from datetime import timedelta, datetime
+from discord.ext import commands, tasks
 from flask import Flask
 from threading import Thread
 import json
@@ -53,6 +53,13 @@ last_voice_channel = {}
 manual_leave = set()
 warn_reasons = {}  # لتخزين أسباب التحذيرات
 
+# ==========================
+# ⭐ إعدادات الـ DEAF ⭐
+# ==========================
+AFK_CHANNEL_ID = 123456789012345678  # 🔥 غيرو بـ ID الروم الـ AFK متاعك
+DEAF_THRESHOLD_MINUTES = 20  # المدة قبل النقل للـ AFK (بالدقائق)
+deafened_users = {}  # لتخزين الأعضاء المتديفنيين مع وقت بداية الديفنينغ
+
 INVITE_REGEX = re.compile(
     r"(https?://)?(www\.)?(discord\.gg|discord\.com/invite|discord\.app/invite)/\S+",
     re.I
@@ -67,6 +74,10 @@ async def on_ready():
     print(f"✅ Bot is ready!")
     print(f"✅ Connected to {len(bot.guilds)} guilds")
     print(f"👑 Owner ID: {bot.owner_id}")
+    
+    # ⭐ بدء المهمة الدورية للتحقق من الـ Deaf
+    check_deaf_users.start()
+    print("🔇 Deaf monitor started!")
 
 # ==========================
 # HELLO COMMAND
@@ -113,6 +124,39 @@ async def leave(ctx):
 # ==========================
 @bot.event
 async def on_voice_state_update(member, before, after):
+    # ⭐ معالجة الـ Deaf
+    if not member.bot:  # نتجاهل البوتات
+        # إذا العضو أصبح متديفن (Server Deaf)
+        if after.deaf and not before.deaf:
+            deafened_users[member.id] = datetime.now()
+            print(f"🔇 {member.name} has been deafened at {deafened_users[member.id]}")
+            
+            # نرسل تحذير خاص
+            try:
+                await member.send(f"🔇 You have been deafened in **{member.guild.name}**. You will be moved to AFK after {DEAF_THRESHOLD_MINUTES} minutes of being deaf.")
+            except:
+                pass
+            
+            # نبعث رسالة في الـ logs
+            log = discord.utils.get(member.guild.text_channels, name=LOG_CHANNEL_NAME)
+            if log:
+                await log.send(f"🔇 {member.mention} has been deafened. Will be moved to AFK after {DEAF_THRESHOLD_MINUTES} minutes.")
+
+        # إذا العضو فك الديفنينغ
+        elif not after.deaf and before.deaf:
+            if member.id in deafened_users:
+                elapsed = (datetime.now() - deafened_users[member.id]).total_seconds() / 60
+                del deafened_users[member.id]
+                print(f"🔊 {member.name} is no longer deafened (was deaf for {elapsed:.1f} min)")
+                
+                # نرسل رسالة في الـ logs
+                log = discord.utils.get(member.guild.text_channels, name=LOG_CHANNEL_NAME)
+                if log:
+                    await log.send(f"🔊 {member.mention} is no longer deafened (was deaf for {elapsed:.1f} minutes)")
+
+    # ==========================
+    # الجزء القديم لإعادة الاتصال (خاص بالبوت)
+    # ==========================
     if member.id != bot.user.id:
         return
     guild = member.guild
@@ -130,6 +174,160 @@ async def on_voice_state_update(member, before, after):
                 print("🔄 Reconnected.")
         except Exception as e:
             print(f"❌ Reconnect error: {e}")
+
+# ==========================
+# ⭐ مهمة التحقق من الـ Deaf (كل دقيقة) ⭐
+# ==========================
+@tasks.loop(seconds=60)  # تتحقق كل 60 ثانية
+async def check_deaf_users():
+    now = datetime.now()
+    
+    for user_id, deaf_since in list(deafened_users.items()):
+        elapsed = (now - deaf_since).total_seconds() / 60
+        
+        if elapsed >= DEAF_THRESHOLD_MINUTES:
+            # نجيب العضو
+            member = bot.get_user(user_id)
+            if member is None:
+                # نحاول نجيبو من الـ guilds
+                for guild in bot.guilds:
+                    member = guild.get_member(user_id)
+                    if member:
+                        break
+            
+            if member is None:
+                # إذا ما لقيناهش نحيوه من القائمة
+                del deafened_users[user_id]
+                continue
+            
+            # نجيب الـ AFK channel
+            afk_channel = bot.get_channel(AFK_CHANNEL_ID)
+            if not afk_channel:
+                print(f"❌ AFK channel not found! ID: {AFK_CHANNEL_ID}")
+                # نجيب أول قناة AFK في السيرفر
+                for guild in bot.guilds:
+                    for channel in guild.voice_channels:
+                        if channel.name.lower() == "afk":
+                            afk_channel = channel
+                            break
+                    if afk_channel:
+                        break
+            
+            if not afk_channel:
+                print("❌ No AFK channel found!")
+                continue
+            
+            # نجيب الـ voice state متاع العضو
+            voice_state = None
+            for guild in bot.guilds:
+                member_in_guild = guild.get_member(user_id)
+                if member_in_guild and member_in_guild.voice:
+                    voice_state = member_in_guild.voice
+                    break
+            
+            if voice_state and voice_state.channel:
+                try:
+                    # نحرك العضو للـ AFK
+                    await member_in_guild.move_to(afk_channel)
+                    print(f"🚀 Moved {member.name} to AFK channel (deaf for {elapsed:.1f} min)")
+                    
+                    # نرسل رسالة في الـ logs
+                    log = discord.utils.get(member_in_guild.guild.text_channels, name=LOG_CHANNEL_NAME)
+                    if log:
+                        await log.send(f"🚀 {member.mention} has been moved to AFK (deaf for {elapsed:.1f} minutes)")
+                    
+                    # نرسل رسالة خاصة للعضو
+                    try:
+                        await member.send(f"🚀 You have been moved to AFK in **{member_in_guild.guild.name}** because you were deafened for {DEAF_THRESHOLD_MINUTES} minutes.")
+                    except:
+                        pass
+                    
+                    # نحيو العضو من القائمة
+                    del deafened_users[user_id]
+                    
+                except Exception as e:
+                    print(f"❌ Failed to move {member.name}: {e}")
+            else:
+                # إذا العضو مش في voice channel نحيوه من القائمة
+                del deafened_users[user_id]
+
+# ==========================
+# ⭐ أوامر التحكم في الـ Deaf ⭐
+# ==========================
+
+@bot.command()
+@commands.is_owner()
+async def set_afk_channel(ctx, channel_id: int):
+    """تغيير الـ AFK channel"""
+    global AFK_CHANNEL_ID
+    AFK_CHANNEL_ID = channel_id
+    await ctx.send(f"✅ AFK channel set to <#{channel_id}>")
+
+@bot.command()
+@commands.is_owner()
+async def set_deaf_time(ctx, minutes: int):
+    """تغيير المدة قبل النقل للـ AFK (بالدقائق)"""
+    global DEAF_THRESHOLD_MINUTES
+    if minutes < 1:
+        return await ctx.send("❌ Time must be at least 1 minute.")
+    DEAF_THRESHOLD_MINUTES = minutes
+    await ctx.send(f"✅ Deaf threshold set to {minutes} minutes")
+
+@bot.command()
+@commands.is_owner()
+async def deaf_list(ctx):
+    """يعرض الأعضاء المتديفنيين والمدة"""
+    if not deafened_users:
+        return await ctx.send("🔇 No deaf users currently tracked.")
+    
+    embed = discord.Embed(
+        title="🔇 Deaf Users Tracking",
+        color=discord.Color.red()
+    )
+    
+    now = datetime.now()
+    for user_id, since in list(deafened_users.items()):
+        member = bot.get_user(user_id)
+        if member is None:
+            # نحاول نجيبو من الـ guilds
+            for guild in bot.guilds:
+                member = guild.get_member(user_id)
+                if member:
+                    break
+        
+        if member:
+            elapsed = (now - since).total_seconds() / 60
+            embed.add_field(
+                name=member.display_name,
+                value=f"⏱️ {elapsed:.1f} minutes\n🆔 {user_id}",
+                inline=False
+            )
+    
+    embed.set_footer(text=f"Threshold: {DEAF_THRESHOLD_MINUTES} minutes")
+    await ctx.send(embed=embed)
+
+@bot.command()
+@commands.is_owner()
+async def deaf_force_move(ctx, member: discord.Member):
+    """ينقل عضو متديفن للـ AFK فوراً"""
+    if member.id not in deafened_users:
+        return await ctx.send(f"❌ {member.mention} is not being tracked as deaf.")
+    
+    afk_channel = bot.get_channel(AFK_CHANNEL_ID)
+    if not afk_channel:
+        return await ctx.send("❌ AFK channel not found!")
+    
+    try:
+        await member.move_to(afk_channel)
+        del deafened_users[member.id]
+        await ctx.send(f"✅ {member.mention} moved to AFK channel manually.")
+        
+        # نرسل رسالة في الـ logs
+        log = discord.utils.get(ctx.guild.text_channels, name=LOG_CHANNEL_NAME)
+        if log:
+            await log.send(f"🚀 {member.mention} manually moved to AFK by {ctx.author.mention}")
+    except Exception as e:
+        await ctx.send(f"❌ Failed to move: {e}")
 
 # ==========================
 # WARNINGS
@@ -333,6 +531,7 @@ async def on_message(message):
                     warnings[message.author.id] = 0
                 return
     await bot.process_commands(message)
+    
 
 # ==========================
 # RUN BOT
