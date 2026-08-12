@@ -240,7 +240,7 @@ async def on_voice_state_update(member, before, after):
 
                         print(
                             f"😴 {current_member} "
-                            f"was self deafened for 20 minutes "
+                            f"was self deafened for 20 minute   "
                             f"→ moved to AFK"
                         )
 
