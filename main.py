@@ -46,7 +46,7 @@ bot.owner_id = 1454256976048558240
 # ==========================
 # SETTINGS
 # ==========================
-BAD_WORDS = ["rab", "omik", "o5tek"]
+BAD_WORDS = ["rab", "omk", "o5tek"]
 LOG_CHANNEL_NAME = "logs"
 warnings = {}
 last_voice_channel = {}
