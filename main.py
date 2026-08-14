@@ -316,4 +316,43 @@ async def on_message(message):
                 reason="Discord Invite"
             )
             return
-        for word in B
+        for word in BAD_WORDS:
+            if word in content:
+                await message.delete()
+                warnings[message.author.id] = warnings.get(
+                    message.author.id, 0
+                ) + 1
+                log = discord.utils.get(
+                    message.guild.text_channels,
+                    name=LOG_CHANNEL_NAME
+                )
+                if log:
+                    await log.send(
+                        f"⚠️ {message.author.mention} used `{word}` "
+                        f"({warnings[message.author.id]}/3)"
+                    )
+                if warnings[message.author.id] >= 3:
+                    await message.author.timeout(
+                        timedelta(minutes=10),
+                        reason="3 Bad Words"
+                    )
+                    warnings[message.author.id] = 0
+                return
+    await bot.process_commands(message)
+
+# ==========================
+# RUN BOT
+# ==========================
+TOKEN = os.getenv('DISCORD_TOKEN')
+if TOKEN is None:
+    print("❌ Error: DISCORD_TOKEN not found!")
+    sys.exit(1)
+
+print("🚀 Starting bot...")
+keep_alive()
+print("🤖 Bot is starting...")
+try:
+    bot.run(TOKEN)
+except Exception as e:
+    print(f"❌ Bot error: {e}")
+    sys.exit(1)
