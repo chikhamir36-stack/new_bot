@@ -85,34 +85,28 @@ async def write(ctx, *, message):
     await ctx.send(message)
 
 # ==========================
-# VOICE COMMANDS (معدلة للجميع)
+# VOICE COMMANDS
 # ==========================
-
 @bot.command()
+@commands.is_owner()
 async def join(ctx):
-    """يدخل البوت إلى الروم الصوتي حقك"""
     if not ctx.author.voice:
-        return await ctx.send("❌ إدخل إلى روم صوتي أولاً.")
-    
+        return await ctx.send("❌ Join a voice channel first.")
     channel = ctx.author.voice.channel
-    
     if ctx.voice_client:
         await ctx.voice_client.move_to(channel)
     else:
         await channel.connect()
-    
     last_voice_channel[ctx.guild.id] = channel
-    await ctx.send(f"✅ دخلت إلى **{channel.name}**")
+    await ctx.send(f"✅ Joined **{channel.name}**")
 
 @bot.command()
+@commands.is_owner()
 async def leave(ctx):
-    """يغادر البوت الروم الصوتي"""
     if ctx.voice_client:
         manual_leave.add(ctx.guild.id)
         await ctx.voice_client.disconnect()
-        await ctx.send("👋 غادرت الروم الصوتي.")
-    else:
-        await ctx.send("❌ البوت موش في روم صوتي.")
+        await ctx.send("👋 Left voice channel.")
 
 # ==========================
 # VOICE STATE UPDATE
@@ -285,7 +279,7 @@ async def warnings(ctx, member: discord.Member):
     
     await ctx.send(embed=embed)
 
-# 5️⃣ أمر !clear_all (نسخة بدون Admin)
+# 5️⃣ أمر !clear (نسخة بدون Admin)
 @bot.command()
 @commands.is_owner()
 async def clear_all(ctx, amount: int):
@@ -339,6 +333,7 @@ async def on_message(message):
                     warnings[message.author.id] = 0
                 return
     await bot.process_commands(message)
+    
 
 # ==========================
 # RUN BOT
