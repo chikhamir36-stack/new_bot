@@ -8,6 +8,7 @@ from discord.ext import commands
 from flask import Flask
 from threading import Thread
 import json
+import yt_dlp
 
 # ==========================
 # FLASK KEEP-ALIVE
@@ -80,6 +81,41 @@ INVITE_REGEX = re.compile(
 
 
 # ==========================
+# MUSIC SETTINGS
+# ==========================
+YTDL_OPTIONS = {
+    "format": "bestaudio/best",
+    "noplaylist": True,
+    "quiet": True,
+    "default_search": "ytsearch",
+    "source_address": "0.0.0.0"
+}
+
+FFMPEG_OPTIONS = {
+    "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
+    "options": "-vn"
+}
+
+ytdl = yt_dlp.YoutubeDL(YTDL_OPTIONS)
+
+# Server music data
+music_data = {}
+
+
+def get_music_data(guild_id):
+    if guild_id not in music_data:
+        music_data[guild_id] = {
+            "url": None,
+            "title": None,
+            "volume": 0.5,
+            "queue": [],
+            "current_index": 0,
+            "loop": False
+        }
+    return music_data[guild_id]
+
+
+# ==========================
 # READY
 # ==========================
 @bot.event
@@ -88,6 +124,7 @@ async def on_ready():
     print(f"✅ Bot is ready!")
     print(f"✅ Connected to {len(bot.guilds)} guilds")
     print(f"👑 Owner ID: {bot.owner_id}")
+    print("🎵 Music System: ON")
     print("😴 Self Deafen AFK System: ON")
 
 
@@ -110,13 +147,14 @@ async def write(ctx, *, message):
 
 
 # ==========================
-# VOICE COMMANDS
+# VOICE COMMANDS (محدثة)
 # ==========================
 @bot.command()
 @commands.is_owner()
 async def join(ctx):
+    """يدخل البوت إلى الروم الصوتي الخاص بك"""
     if not ctx.author.voice:
-        return await ctx.send("❌ Join a voice channel first.")
+        return await ctx.send("❌ إدخل إلى روم صوتي أولاً.")
 
     channel = ctx.author.voice.channel
 
@@ -127,16 +165,300 @@ async def join(ctx):
 
     last_voice_channel[ctx.guild.id] = channel
 
-    await ctx.send(f"✅ Joined **{channel.name}**")
+    await ctx.send(f"✅ دخلت إلى **{channel.name}**")
 
 
 @bot.command()
 @commands.is_owner()
 async def leave(ctx):
+    """يغادر البوت الروم الصوتي"""
     if ctx.voice_client:
         manual_leave.add(ctx.guild.id)
+        
+        # إيقاف الموسيقى قبل المغادرة
+        if ctx.voice_client.is_playing() or ctx.voice_client.is_paused():
+            ctx.voice_client.stop()
+            
         await ctx.voice_client.disconnect()
-        await ctx.send("👋 Left voice channel.")
+        await ctx.send("👋 غادرت الروم الصوتي.")
+    else:
+        await ctx.send("❌ البوت ليس في روم صوتي.")
+
+
+# ==========================
+# MUSIC COMMANDS
+# ==========================
+
+@bot.command()
+async def play(ctx, *, search: str):
+    """تشغيل أغنية من يوتيوب"""
+    if not ctx.author.voice:
+        await ctx.send("❌ لازم تدخل Voice Channel الأول.")
+        return
+
+    voice_channel = ctx.author.voice.channel
+    voice_client = ctx.guild.voice_client
+
+    # Connect
+    if voice_client is None:
+        try:
+            voice_client = await voice_channel.connect()
+        except Exception as e:
+            await ctx.send(f"❌ ما نجمتش ندخل للـ Voice Channel.\n`{e}`")
+            return
+
+    # Move bot if needed
+    elif voice_client.channel != voice_channel:
+        await voice_client.move_to(voice_channel)
+
+    await ctx.send("🔎 نبحث على الأغنية...")
+
+    try:
+        loop = asyncio.get_running_loop()
+
+        data = await loop.run_in_executor(
+            None,
+            lambda: ytdl.extract_info(search, download=False)
+        )
+
+        if "entries" in data:
+            data = data["entries"][0]
+
+        if not data:
+            await ctx.send("❌ ما لقيتش الأغنية.")
+            return
+
+        audio_url = data["url"]
+        title = data.get("title", "Unknown")
+        
+        music = get_music_data(ctx.guild.id)
+
+        # Add to queue
+        music["queue"].append({
+            "url": audio_url,
+            "title": title
+        })
+
+        # If not playing, play immediately
+        if not voice_client.is_playing() and not voice_client.is_paused():
+            await play_next(ctx.guild.id)
+
+        await ctx.send(
+            f"🎵 تمت الإضافة إلى القائمة\n"
+            f"**{title}**"
+        )
+
+    except Exception as e:
+        print(e)
+        await ctx.send(
+            f"❌ صار خطأ وأنا نحاول نشغل الأغنية.\n"
+            f"`{e}`"
+        )
+
+
+async def play_next(guild_id):
+    """تشغيل الأغنية التالية في القائمة"""
+    music = get_music_data(guild_id)
+    
+    if not music["queue"]:
+        return
+        
+    voice_client = bot.get_guild(guild_id).voice_client
+    
+    if voice_client is None:
+        return
+        
+    # Get next song
+    song = music["queue"].pop(0)
+    
+    source = discord.FFmpegPCMAudio(
+        song["url"],
+        **FFMPEG_OPTIONS
+    )
+
+    source = discord.PCMVolumeTransformer(
+        source,
+        volume=music["volume"]
+    )
+
+    def after_playing(error):
+        if error:
+            print(f"Player error: {error}")
+        
+        # Play next song
+        asyncio.run_coroutine_threadsafe(
+            play_next(guild_id),
+            bot.loop
+        )
+
+    voice_client.play(
+        source,
+        after=after_playing
+    )
+
+    music["url"] = song["url"]
+    music["title"] = song["title"]
+
+
+@bot.command()
+async def queue(ctx):
+    """عرض قائمة الأغاني"""
+    music = get_music_data(ctx.guild.id)
+    
+    if not music["queue"]:
+        await ctx.send("📭 القائمة فارغة.")
+        return
+        
+    queue_list = ""
+    for i, song in enumerate(music["queue"][:10], 1):
+        queue_list += f"`{i}.` {song['title']}\n"
+        
+    if len(music["queue"]) > 10:
+        queue_list += f"\nو {len(music['queue']) - 10} أغنية أخرى..."
+        
+    embed = discord.Embed(
+        title="📋 قائمة التشغيل",
+        description=queue_list,
+        color=discord.Color.blue()
+    )
+    
+    if music["title"]:
+        embed.add_field(
+            name="🎵 الأغنية الحالية",
+            value=music["title"],
+            inline=False
+        )
+        
+    await ctx.send(embed=embed)
+
+
+@bot.command()
+async def pause(ctx):
+    """إيقاف الأغنية مؤقتاً"""
+    voice_client = ctx.guild.voice_client
+
+    if voice_client is None:
+        await ctx.send("❌ البوت موش في Voice Channel.")
+        return
+
+    if voice_client.is_playing():
+        voice_client.pause()
+        await ctx.send("⏸️ الأغنية توقفت مؤقتاً.")
+    else:
+        await ctx.send("❌ ما فماش أغنية تخدم.")
+
+
+@bot.command()
+async def resume(ctx):
+    """استئناف الأغنية"""
+    voice_client = ctx.guild.voice_client
+
+    if voice_client is None:
+        await ctx.send("❌ البوت موش في Voice Channel.")
+        return
+
+    if voice_client.is_paused():
+        voice_client.resume()
+        await ctx.send("▶️ تم استئناف الأغنية.")
+    else:
+        await ctx.send("❌ الأغنية موش موقفة.")
+
+
+@bot.command()
+async def skip(ctx):
+    """تخطي الأغنية الحالية"""
+    voice_client = ctx.guild.voice_client
+
+    if voice_client is None:
+        await ctx.send("❌ البوت موش في Voice Channel.")
+        return
+
+    if voice_client.is_playing() or voice_client.is_paused():
+        voice_client.stop()
+        await ctx.send("⏭️ تم تخطي الأغنية.")
+    else:
+        await ctx.send("❌ ما فماش أغنية تخدم.")
+
+
+@bot.command()
+async def stop(ctx):
+    """إيقاف الأغنية وتفريغ القائمة"""
+    voice_client = ctx.guild.voice_client
+
+    if voice_client is None:
+        await ctx.send("❌ البوت موش في Voice Channel.")
+        return
+
+    if voice_client.is_playing() or voice_client.is_paused():
+        voice_client.stop()
+        
+    music = get_music_data(ctx.guild.id)
+    music["queue"] = []
+    music["title"] = None
+    music["url"] = None
+
+    await ctx.send("⏹️ تم إيقاف الأغنية وتفريغ القائمة.")
+
+
+@bot.command()
+async def volume(ctx, level: int):
+    """تغيير مستوى الصوت (0-100)"""
+    if level < 0 or level > 100:
+        await ctx.send("❌ الـ volume لازم يكون بين `0` و `100`.")
+        return
+
+    voice_client = ctx.guild.voice_client
+
+    if voice_client is None:
+        await ctx.send("❌ البوت موش في Voice Channel.")
+        return
+
+    if voice_client.source is None:
+        await ctx.send("❌ ما فماش أغنية تخدم.")
+        return
+
+    if isinstance(
+        voice_client.source,
+        discord.PCMVolumeTransformer
+    ):
+        voice_client.source.volume = level / 100
+
+        music = get_music_data(ctx.guild.id)
+        music["volume"] = level / 100
+
+        await ctx.send(
+            f"🔊 Volume أصبح **{level}%**"
+        )
+    else:
+        await ctx.send("❌ ما نجمتش نبدل الـ volume.")
+
+
+@bot.command()
+async def nowplaying(ctx):
+    """عرض الأغنية الحالية"""
+    music = get_music_data(ctx.guild.id)
+    
+    if not music["title"]:
+        await ctx.send("❌ ما فماش أغنية تخدم.")
+        return
+        
+    embed = discord.Embed(
+        title="🎵 الأغنية الحالية",
+        description=music["title"],
+        color=discord.Color.green()
+    )
+    
+    await ctx.send(embed=embed)
+
+
+@bot.command()
+async def clearqueue(ctx):
+    """تفريغ قائمة الأغاني"""
+    music = get_music_data(ctx.guild.id)
+    count = len(music["queue"])
+    music["queue"] = []
+    
+    await ctx.send(f"🗑️ تم حذف {count} أغنية من القائمة.")
 
 
 # ==========================
@@ -240,7 +562,7 @@ async def on_voice_state_update(member, before, after):
 
                         print(
                             f"😴 {current_member} "
-                            f"was self deafened for 20 minute   "
+                            f"was self deafened for 20 minutes "
                             f"→ moved to AFK"
                         )
 
@@ -309,7 +631,7 @@ async def on_voice_state_update(member, before, after):
                 )
 
     # ==================================================
-    # YOUR OLD BOT VOICE SYSTEM
+    # BOT VOICE RECONNECT SYSTEM
     # ==================================================
 
     if member.id != bot.user.id:
@@ -744,6 +1066,34 @@ async def on_message(message):
     await bot.process_commands(
         message
     )
+
+
+# ==========================
+# ERROR HANDLER
+# ==========================
+@bot.event
+async def on_command_error(ctx, error):
+
+    if isinstance(error, commands.MissingRequiredArgument):
+        await ctx.send(
+            "❌ استعمل الأمر هكا:\n"
+            "`!play <اسم الأغنية أو الرابط>`"
+        )
+
+    elif isinstance(error, commands.BadArgument):
+        await ctx.send(
+            "❌ استعمل volume هكا:\n"
+            "`!volume 50`"
+        )
+
+    elif isinstance(error, commands.NotOwner):
+        await ctx.send("❌ هذا الأمر للمالك فقط.")
+
+    elif isinstance(error, commands.CommandNotFound):
+        pass
+
+    else:
+        print(f"Error: {error}")
 
 
 # ==========================
