@@ -499,7 +499,7 @@ async def on_message(message):
                 return
     await bot.process_commands(message)
 # ==========================
-# 📸 أمر !photo (النسخة الصحيحة)
+# 📸 أمر !photo (النسخة النهائية)
 # ==========================
 
 @bot.command()
@@ -512,32 +512,17 @@ async def photo(ctx):
     
     # نتحقق إذا كان في صورة مرفقة
     if not ctx.message.attachments:
-        return await ctx.send("❌ أرفق صورة مع الأمر! استعمل: `!photo` مع صورة", delete_after=5)
+        return await ctx.send("❌ أرفق صورة مع الأمر!", delete_after=5)
     
     # ناخذ أول صورة مرفقة
     attachment = ctx.message.attachments[0]
-    
-    # نتحقق إذا كانت الصورة بصيغة مسموحة
-    if not attachment.content_type or not attachment.content_type.startswith('image/'):
-        return await ctx.send("❌ هذا الملف ليس صورة! أرفق صورة بصيغة (png, jpg, gif, ...)", delete_after=5)
     
     try:
         # نحذف رسالة المستخدم
         await ctx.message.delete()
         
-        # ===== الطريقة الصحيحة لإرسال الصورة =====
-        # ناخذ رابط الصورة مباشرة
-        image_url = attachment.url
-        
-        # نعمل Embed بالصورة
-        embed = discord.Embed(
-            color=discord.Color.blue()
-        )
-        embed.set_image(url=image_url)
-        embed.set_footer(text=f"📸 طلب من: {ctx.author.display_name}")
-        
-        # نبعث الـ Embed
-        await ctx.send(embed=embed)
+        # ===== الطريقة 1: نبعث الصورة فقط (بدون Embed) =====
+        await ctx.send(attachment.url)
         
     except Exception as e:
         await ctx.send(f"❌ حدث خطأ: {str(e)}", delete_after=5)
