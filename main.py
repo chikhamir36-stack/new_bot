@@ -498,16 +498,16 @@ async def on_message(message):
                     warnings[message.author.id] = 0
                 return
     await bot.process_commands(message)
-    # ==========================
-# 📸 أمر !photo مع نص
+# ==========================
+# 📸 أمر !photo
 # ==========================
 
 @bot.command()
 @commands.is_owner()  # شيلها إذا تحب الكل يستعملها
-async def photo(ctx, *, caption: str = None):
+async def photo(ctx):
     """
-    يعلق المستخدم صورة مع نص اختياري، البوت يحذف الرسالة ويعيد نشر الصورة
-    استعمل: !photo نص (مع صورة مرفقة)
+    يعلق المستخدم صورة، البوت يحذف الرسالة ويعيد نشر الصورة
+    استعمل: !photo (مع صورة مرفقة)
     """
     
     # نتحقق إذا كان في صورة مرفقة
@@ -525,16 +525,8 @@ async def photo(ctx, *, caption: str = None):
         # نحذف رسالة المستخدم
         await ctx.message.delete()
         
-        # نعمل Embed بالصورة والنص
-        embed = discord.Embed(
-            description=caption if caption else None,
-            color=discord.Color.blue()
-        )
-        embed.set_image(url=attachment.url)
-        embed.set_footer(text=f"📸 طلب من: {ctx.author.display_name}")
-        
-        # نبعث الـ Embed
-        await ctx.send(embed=embed)
+        # نبعث الصورة في الشات
+        await ctx.send(file=await attachment.to_file())
         
     except Exception as e:
         await ctx.send(f"❌ حدث خطأ: {str(e)}", delete_after=5)
