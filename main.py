@@ -456,54 +456,6 @@ async def dmembed(ctx, member: discord.Member, title: str, *, description: str):
     except:
         await ctx.send(f"❌ لا يمكن إرسال Embed لـ **{member.display_name}**")
 
-# ==========================
-# 📊 LEADERBOARD (INVITES)
-# ==========================
-
-@bot.command()
-@commands.is_owner()  # شيلها إذا تحب الكل يشوفها
-async def leaderboard(ctx):
-    """يعرض ترتيب الأعضاء حسب عدد الدعوات"""
-    
-    if not invite_data:
-        return await ctx.send("📊 مازال ما عندنا حتى دعوة!")
-    
-    # نرتب الدعوات من الأكبر للأصغر
-    sorted_invites = sorted(invite_data.items(), key=lambda x: x[1], reverse=True)
-    
-    # ناخذ الـ Top 10
-    top_10 = sorted_invites[:10]
-    
-    embed = discord.Embed(
-        title="🏆 لوحة المتصدرين - الدعوات",
-        description="أكثر 10 أعضاء دعوة",
-        color=discord.Color.gold()
-    )
-    
-    description = ""
-    for i, (user_id, count) in enumerate(top_10, 1):
-        try:
-            user = await bot.fetch_user(int(user_id))
-            name = user.display_name
-        except:
-            name = f"مستخدم غير معروف (ID: {user_id})"
-        
-        if i == 1:
-            medal = "🥇"
-        elif i == 2:
-            medal = "🥈"
-        elif i == 3:
-            medal = "🥉"
-        else:
-            medal = f"#{i}"
-        
-        description += f"{medal} **{name}** → `{count}` دعوة\n"
-    
-    embed.description = description
-    embed.set_footer(text=f"طلب من: {ctx.author.display_name}")
-    embed.set_thumbnail(url=ctx.guild.icon.url if ctx.guild.icon else None)
-    
-    await ctx.send(embed=embed)
 
 # ==========================
 # MESSAGE FILTER
@@ -586,6 +538,175 @@ async def photo(ctx, *, caption: str = None):
         
     except Exception as e:
         await ctx.send(f"❌ حدث خطأ: {str(e)}", delete_after=5)
+        # ==========================
+# 🛏️ نظام AFK (Self-Deaf)
+# ==========================
+
+# متغيرات لتتبع الـ AFK
+afk_tracker = {}  # {user_id: {"start_time": timestamp, "message_sent": False, "channel_id": channel_id}}
+
+@bot.event
+async def on_voice_state_update(member, before, after):
+    """يكتشف الـ Self-Deaf ويدير نظام AFK"""
+    
+    # نتجاوز البوتات
+    if member.bot:
+        return
+    
+    # ===== كشف Self-Deaf =====
+    if after.self_deaf and not before.self_deaf:
+        # العضو عمل Self-Deaf
+        afk_tracker[member.id] = {
+            "start_time": discord.utils.utcnow(),
+            "message_sent": False,
+            "channel_id": after.channel.id if after.channel else None
+        }
+        print(f"🔇 {member.display_name} عمل Self-Deaf")
+        
+        # نبدا المهمة لمراقبة الوقت
+        asyncio.create_task(afk_monitor(member))
+    
+    # ===== كشف إلغاء Self-Deaf =====
+    elif not after.self_deaf and before.self_deaf:
+        # العضو ألغى الـ Self-Deaf
+        if member.id in afk_tracker:
+            del afk_tracker[member.id]
+            print(f"🔊 {member.display_name} ألغى Self-Deaf")
+
+
+async def afk_monitor(member):
+    """تراقب العضو اللي عمل Self-Deaf"""
+    
+    # نستنى 5 دقائق باش نبعث الرسالة
+    await asyncio.sleep(300)  # 5 دقائق = 300 ثانية
+    
+    # نتحقق إذا كان العضو لسا في الـ AFK
+    if member.id not in afk_tracker:
+        return
+    
+    # نتحقق إذا كان لسا Self-Deaf
+    if not member.voice or not member.voice.self_deaf:
+        if member.id in afk_tracker:
+            del afk_tracker[member.id]
+        return
+    
+    # نبعث الرسالة (مرة وحدة)
+    if not afk_tracker[member.id]["message_sent"]:
+        afk_tracker[member.id]["message_sent"] = True
+        
+        try:
+            # نبعث رسالة خاصة
+            embed = discord.Embed(
+                title="🔇 تنبيه الـ AFK",
+                description="You are currently **deafened** in **𝙳𝚎𝚊𝚝𝚑 𝚆𝚑𝚒𝚜𝚙𝚎𝚛 𝙲𝚘𝚖𝚖𝚞𝚗𝚒𝚝𝚢**.",
+                color=discord.Color.red()
+            )
+            embed.add_field(
+                name="⏰ تنبيه",
+                value="You will be moved to **AFK** after **1 hour** of being deaf.",
+                inline=False
+            )
+            embed.set_footer(text="🔊 Unmute yourself to cancel AFK")
+            
+            await member.send(embed=embed)
+            print(f"📩 تم إرسال رسالة AFK لـ {member.display_name}")
+            
+        except:
+            print(f"❌ ما قدرتش نرسل رسالة لـ {member.display_name} (DM مقفل)")
+    
+    # نستنى ساعة كاملة (3600 ثانية) باش نحرك
+    await asyncio.sleep(3600)  # ساعة = 3600 ثانية
+    
+    # نتحقق مرة أخرى
+    if member.id not in afk_tracker:
+        return
+    
+    if not member.voice or not member.voice.self_deaf:
+        if member.id in afk_tracker:
+            del afk_tracker[member.id]
+        return
+    
+    # ===== نحرك العضو لروم AFK =====
+    try:
+        # نجيب الروم AFK
+        afk_channel = discord.utils.get(member.guild.voice_channels, name="├😴・𝙰𝚏𝚔")
+        
+        if afk_channel is None:
+            print("❌ روم AFK مش موجود!")
+            # نعمل روم إذا مش موجود
+            afk_channel = await member.guild.create_voice_channel(
+                name="├😴・𝙰𝚏𝚔",
+                reason="تم إنشاء روم AFK تلقائياً"
+            )
+            print("✅ تم إنشاء روم AFK")
+        
+        # نحرك العضو
+        await member.move_to(afk_channel, reason="Self-Deaf لمدة ساعة")
+        print(f"🚀 تم نقل {member.display_name} إلى روم AFK")
+        
+        # نرسل رسالة في الشات
+        channel = discord.utils.get(member.guild.text_channels, name="general")
+        if channel is None:
+            channel = member.guild.system_channel
+        
+        if channel:
+            await channel.send(f"🔇 {member.mention} تم نقله إلى **AFK** بعد ساعة من الـ Self-Deaf.")
+        
+        # نحذف من التراكر
+        if member.id in afk_tracker:
+            del afk_tracker[member.id]
+            
+    except Exception as e:
+        print(f"❌ خطأ في نقل العضو: {e}")
+
+
+# ==========================
+# 📊 LEADERBOARD (للكل)
+# ==========================
+
+@bot.command()  # شلنا @commands.is_owner()
+async def leaderboard(ctx):
+    """يعرض ترتيب الأعضاء حسب عدد الدعوات (للجميع)"""
+    
+    if not invite_data:
+        return await ctx.send("📊 مازال ما عندنا حتى دعوة!")
+    
+    # نرتب الدعوات من الأكبر للأصغر
+    sorted_invites = sorted(invite_data.items(), key=lambda x: x[1], reverse=True)
+    
+    # ناخذ الـ Top 10
+    top_10 = sorted_invites[:10]
+    
+    embed = discord.Embed(
+        title="🏆 لوحة المتصدرين - الدعوات",
+        description="أكثر 10 أعضاء دعوة",
+        color=discord.Color.gold()
+    )
+    
+    description = ""
+    for i, (user_id, count) in enumerate(top_10, 1):
+        try:
+            user = await bot.fetch_user(int(user_id))
+            name = user.display_name
+        except:
+            name = f"مستخدم غير معروف (ID: {user_id})"
+        
+        if i == 1:
+            medal = "🥇"
+        elif i == 2:
+            medal = "🥈"
+        elif i == 3:
+            medal = "🥉"
+        else:
+            medal = f"#{i}"
+        
+        description += f"{medal} **{name}** → `{count}` دعوة\n"
+    
+    embed.description = description
+    embed.set_footer(text=f"طلب من: {ctx.author.display_name}")
+    embed.set_thumbnail(url=ctx.guild.icon.url if ctx.guild.icon else None)
+    
+    await ctx.send(embed=embed)
 
 # ==========================
 # RUN BOT
