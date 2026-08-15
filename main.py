@@ -661,7 +661,7 @@ async def leaderboard(ctx):
     """يعرض ترتيب الأعضاء حسب عدد الدعوات (للجميع)"""
     
     if not invite_data:
-        return await ctx.send("📊 مازال ما عندنا حتى دعوة!")
+        return await ctx.send("📊you dont have invites !")
     
     # نرتب الدعوات من الأكبر للأصغر
     sorted_invites = sorted(invite_data.items(), key=lambda x: x[1], reverse=True)
@@ -670,8 +670,8 @@ async def leaderboard(ctx):
     top_10 = sorted_invites[:10]
     
     embed = discord.Embed(
-        title="🏆 لوحة المتصدرين - الدعوات",
-        description="أكثر 10 أعضاء دعوة",
+        title="🏆 leaderboad-invites",
+        description="Top 10 Invited Members",
         color=discord.Color.gold()
     )
     
@@ -681,7 +681,7 @@ async def leaderboard(ctx):
             user = await bot.fetch_user(int(user_id))
             name = user.display_name
         except:
-            name = f"مستخدم غير معروف (ID: {user_id})"
+            name = f" (ID: {user_id})"
         
         if i == 1:
             medal = "🥇"
@@ -692,10 +692,10 @@ async def leaderboard(ctx):
         else:
             medal = f"#{i}"
         
-        description += f"{medal} **{name}** → `{count}` دعوة\n"
+        description += f"{medal} **{name}** → `{count}` invites\n"
     
     embed.description = description
-    embed.set_footer(text=f"طلب من: {ctx.author.display_name}")
+    embed.set_footer(text=f"Requested by: {ctx.author.display_name}")
     embed.set_thumbnail(url=ctx.guild.icon.url if ctx.guild.icon else None)
     
     await ctx.send(embed=embed)
