@@ -316,7 +316,7 @@ async def dm(ctx, member: discord.Member, *, message: str):
     """يبعث رسالة خاصة لعضو واحد"""
     try:
         embed = discord.Embed(
-            title="📩 رسالة من الإدارة",
+            title="📩 Message from 𝙳𝚎𝚊𝚝𝚑 𝚆𝚑𝚒𝚜𝚙𝚎𝚛 𝙲𝚘𝚖𝚖𝚞𝚗𝚒𝚝𝚢",
             description=message,
             color=discord.Color.blue()
         )
