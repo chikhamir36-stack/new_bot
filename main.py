@@ -499,11 +499,11 @@ async def on_message(message):
                 return
     await bot.process_commands(message)
 # ==========================
-# 📸 أمر !photo
+# 📸 أمر !photo (النسخة الصحيحة)
 # ==========================
 
 @bot.command()
-@commands.is_owner()  # شيلها إذا تحب الكل يستعملها
+@commands.is_owner()
 async def photo(ctx):
     """
     يعلق المستخدم صورة، البوت يحذف الرسالة ويعيد نشر الصورة
@@ -525,8 +525,19 @@ async def photo(ctx):
         # نحذف رسالة المستخدم
         await ctx.message.delete()
         
-        # نبعث الصورة في الشات
-        await ctx.send(file=await attachment.to_file())
+        # ===== الطريقة الصحيحة لإرسال الصورة =====
+        # ناخذ رابط الصورة مباشرة
+        image_url = attachment.url
+        
+        # نعمل Embed بالصورة
+        embed = discord.Embed(
+            color=discord.Color.blue()
+        )
+        embed.set_image(url=image_url)
+        embed.set_footer(text=f"📸 طلب من: {ctx.author.display_name}")
+        
+        # نبعث الـ Embed
+        await ctx.send(embed=embed)
         
     except Exception as e:
         await ctx.send(f"❌ حدث خطأ: {str(e)}", delete_after=5)
