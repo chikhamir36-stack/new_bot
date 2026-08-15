@@ -481,30 +481,33 @@ async def on_message(message):
                 return
     await bot.process_commands(message)
 # ==========================
-# 📸 أمر !photo (النسخة النهائية)
+# 📸 أمر !photo (نسخة Embed)
 # ==========================
 
 @bot.command()
 @commands.is_owner()
 async def photo(ctx):
     """
-    يعلق المستخدم صورة، البوت يحذف الرسالة ويعيد نشر الصورة
-    استعمل: !photo (مع صورة مرفقة)
+    يعلق المستخدم صورة، البوت يحذف الرسالة ويعيد نشر الصورة في Embed
     """
     
-    # نتحقق إذا كان في صورة مرفقة
     if not ctx.message.attachments:
         return await ctx.send("❌ أرفق صورة مع الأمر!", delete_after=5)
     
-    # ناخذ أول صورة مرفقة
     attachment = ctx.message.attachments[0]
     
     try:
-        # نحذف رسالة المستخدم
         await ctx.message.delete()
         
-        # ===== الطريقة 1: نبعث الصورة فقط (بدون Embed) =====
-        await ctx.send(attachment.url)
+        # نعمل Embed
+        embed = discord.Embed(
+            color=discord.Color.blue()
+        )
+        # نضيف الصورة
+        embed.set_image(url=attachment.url)
+        embed.set_footer(text=f"📸 طلب من: {ctx.author.display_name}")
+        
+        await ctx.send(embed=embed)
         
     except Exception as e:
         await ctx.send(f"❌ حدث خطأ: {str(e)}", delete_after=5)
@@ -567,12 +570,12 @@ async def afk_monitor(member):
         try:
             # نبعث رسالة خاصة
             embed = discord.Embed(
-                title="🔇 تنبيه الـ AFK",
+                title="🔇 alert to AFK",
                 description="You are currently **deafened** in **𝙳𝚎𝚊𝚝𝚑 𝚆𝚑𝚒𝚜𝚙𝚎𝚛 𝙲𝚘𝚖𝚖𝚞𝚗𝚒𝚝𝚢**.",
                 color=discord.Color.red()
             )
             embed.add_field(
-                name="⏰ تنبيه",
+                name="⏰ alert",
                 value="You will be moved to **AFK** after **1 hour** of being deaf.",
                 inline=False
             )
