@@ -352,7 +352,7 @@ async def dmrole(ctx, role: discord.Role, *, message: str):
         fail_count = 0
         
         embed = discord.Embed(
-            title="📢 رسالة من الإدارة",
+            title="📢  Message from 𝙳𝚎𝚊𝚝𝚑 𝚆𝚑𝚒𝚜𝚙𝚎𝚛 𝙲𝚘𝚖𝚖𝚞𝚗𝚒𝚝𝚢",
             description=message,
             color=discord.Color.green()
         )
@@ -398,7 +398,7 @@ async def dmall(ctx, *, message: str):
         fail_count = 0
         
         embed = discord.Embed(
-            title="📢 إعلان من الإدارة",
+            title="📢  Message from 𝙳𝚎𝚊𝚝𝚑 𝚆𝚑𝚒𝚜𝚙𝚎𝚛 𝙲𝚘𝚖𝚖𝚞𝚗𝚒𝚝𝚢",
             description=message,
             color=discord.Color.green()
         )
@@ -425,7 +425,7 @@ async def dmwithreason(ctx, member: discord.Member, *, message: str):
     """يبعث رسالة خاصة مع سبب (للتحذيرات مثلاً)"""
     try:
         embed = discord.Embed(
-            title="📩 تنبيه من الإدارة",
+            title="📩  Message from 𝙳𝚎𝚊𝚝𝚑 𝚆𝚑𝚒𝚜𝚙𝚎𝚛 𝙲𝚘𝚖𝚖𝚞𝚗𝚒𝚝𝚢",
             description=message,
             color=discord.Color.red()
         )
@@ -437,24 +437,6 @@ async def dmwithreason(ctx, member: discord.Member, *, message: str):
     except:
         await ctx.send(f"❌ لا يمكن إرسال رسالة لـ **{member.display_name}**")
 
-# 🔟 أمر !dmembed
-@bot.command()
-@commands.is_owner()
-async def dmembed(ctx, member: discord.Member, title: str, *, description: str):
-    """يبعث رسالة Embed مخصصة لعضو"""
-    try:
-        embed = discord.Embed(
-            title=title,
-            description=description,
-            color=discord.Color.purple()
-        )
-        embed.set_footer(text=f"من: {ctx.author.display_name}")
-        embed.set_thumbnail(url=ctx.guild.icon.url if ctx.guild.icon else None)
-        
-        await member.send(embed=embed)
-        await ctx.send(f"✅ تم إرسال Embed إلى **{member.display_name}**!")
-    except:
-        await ctx.send(f"❌ لا يمكن إرسال Embed لـ **{member.display_name}**")
 
 
 # ==========================
