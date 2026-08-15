@@ -546,6 +546,46 @@ async def on_message(message):
                     warnings[message.author.id] = 0
                 return
     await bot.process_commands(message)
+    # ==========================
+# 📸 أمر !photo مع نص
+# ==========================
+
+@bot.command()
+@commands.is_owner()  # شيلها إذا تحب الكل يستعملها
+async def photo(ctx, *, caption: str = None):
+    """
+    يعلق المستخدم صورة مع نص اختياري، البوت يحذف الرسالة ويعيد نشر الصورة
+    استعمل: !photo نص (مع صورة مرفقة)
+    """
+    
+    # نتحقق إذا كان في صورة مرفقة
+    if not ctx.message.attachments:
+        return await ctx.send("❌ أرفق صورة مع الأمر! استعمل: `!photo` مع صورة", delete_after=5)
+    
+    # ناخذ أول صورة مرفقة
+    attachment = ctx.message.attachments[0]
+    
+    # نتحقق إذا كانت الصورة بصيغة مسموحة
+    if not attachment.content_type or not attachment.content_type.startswith('image/'):
+        return await ctx.send("❌ هذا الملف ليس صورة! أرفق صورة بصيغة (png, jpg, gif, ...)", delete_after=5)
+    
+    try:
+        # نحذف رسالة المستخدم
+        await ctx.message.delete()
+        
+        # نعمل Embed بالصورة والنص
+        embed = discord.Embed(
+            description=caption if caption else None,
+            color=discord.Color.blue()
+        )
+        embed.set_image(url=attachment.url)
+        embed.set_footer(text=f"📸 طلب من: {ctx.author.display_name}")
+        
+        # نبعث الـ Embed
+        await ctx.send(embed=embed)
+        
+    except Exception as e:
+        await ctx.send(f"❌ حدث خطأ: {str(e)}", delete_after=5)
 
 # ==========================
 # RUN BOT
