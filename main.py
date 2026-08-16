@@ -531,14 +531,14 @@ async def on_message(message):
     await bot.process_commands(message)
 
 # ==========================
-# 🛏️ نظام AFK (Self-Deaf)
+# 🛏️ نظام AFK (Self-Deaf) - معدل
 # ==========================
 
 # متغيرات لتتبع الـ AFK
 afk_tracker = {}  # {user_id: {"start_time": timestamp, "message_sent": False, "channel_id": channel_id}}
 
 @bot.event
-async def on_voice_state_update(member, before, after):
+async def on_voice_state_update_afk(member, before, after):
     """يكتشف الـ Self-Deaf ويدير نظام AFK"""
     
     # نتجاوز البوتات
@@ -589,12 +589,12 @@ async def afk_monitor(member):
         try:
             # نبعث رسالة خاصة
             embed = discord.Embed(
-                title="🔇 alert to AFK",
+                title="🔇 AFK Alert",
                 description="You are currently **deafened** in **𝙳𝚎𝚊𝚝𝚑 𝚆𝚑𝚒𝚜𝚙𝚎𝚛 𝙲𝚘𝚖𝚖𝚞𝚗𝚒𝚝𝚢**.",
                 color=discord.Color.red()
             )
             embed.add_field(
-                name="⏰ alert",
+                name="⏰ Alert",
                 value="You will be moved to **AFK** after **1 hour** of being deaf.",
                 inline=False
             )
@@ -606,7 +606,7 @@ async def afk_monitor(member):
         except:
             print(f"❌ ما قدرتش نرسل رسالة لـ {member.display_name} (DM مقفل)")
     
-    # نستنى ساعة كاملة (3600 ثانية) باش نحرك
+    # ===== نستنى ساعة كاملة (3600 ثانية) باش نحرك =====
     await asyncio.sleep(3600)  # ساعة = 3600 ثانية
     
     # نتحقق مرة أخرى
@@ -636,10 +636,17 @@ async def afk_monitor(member):
         await member.move_to(afk_channel, reason="Self-Deaf لمدة ساعة")
         print(f"🚀 تم نقل {member.display_name} إلى روم AFK")
         
-        # نرسل رسالة في الشات
+        # ===== نرسل رسالة في الشات (مش logs) =====
+        # نجيب أول شانل عام
         channel = discord.utils.get(member.guild.text_channels, name="general")
         if channel is None:
             channel = member.guild.system_channel
+        if channel is None:
+            # إذا ما لقاوش، نجيب أول شانل نصي
+            for ch in member.guild.text_channels:
+                if ch.permissions_for(member.guild.me).send_messages:
+                    channel = ch
+                    break
         
         if channel:
             await channel.send(f"🔇 {member.mention} تم نقله إلى **AFK** بعد ساعة من الـ Self-Deaf.")
