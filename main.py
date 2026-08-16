@@ -531,14 +531,14 @@ async def on_message(message):
     await bot.process_commands(message)
 
 # ==========================
-# 🛏️ نظام AFK (Self-Deaf) - النسخة النهائية
+# 🛏️ نظام AFK (Self-Deaf)
 # ==========================
 
 # متغيرات لتتبع الـ AFK
 afk_tracker = {}  # {user_id: {"start_time": timestamp, "message_sent": False, "channel_id": channel_id}}
 
 @bot.event
-async def on_voice_state_update_afk(member, before, after):
+async def on_voice_state_update(member, before, after):
     """يكتشف الـ Self-Deaf ويدير نظام AFK"""
     
     # نتجاوز البوتات
@@ -582,43 +582,31 @@ async def afk_monitor(member):
             del afk_tracker[member.id]
         return
     
-    # ===== نبعث الرسالة (مرة وحدة) =====
+    # نبعث الرسالة (مرة وحدة)
     if not afk_tracker[member.id]["message_sent"]:
         afk_tracker[member.id]["message_sent"] = True
         
         try:
             # نبعث رسالة خاصة
             embed = discord.Embed(
-                title="🔇 AFK Alert",
+                title="🔇 alert to AFK",
                 description="You are currently **deafened** in **𝙳𝚎𝚊𝚝𝚑 𝚆𝚑𝚒𝚜𝚙𝚎𝚛 𝙲𝚘𝚖𝚖𝚞𝚗𝚒𝚝𝚢**.",
                 color=discord.Color.red()
             )
             embed.add_field(
-                name="⏰ Alert",
+                name="⏰ alert",
                 value="You will be moved to **AFK** after **1 hour** of being deaf.",
                 inline=False
             )
             embed.set_footer(text="🔊 Unmute yourself to cancel AFK")
             
-            # نحاول نبعث الرسالة
             await member.send(embed=embed)
-            print(f"✅ تم إرسال رسالة AFK لـ {member.display_name}")
+            print(f"📩 تم إرسال رسالة AFK لـ {member.display_name}")
             
-        except discord.Forbidden:
-            print(f"❌ DM مقفل لـ {member.display_name}")
-            # نحاول نبعث رسالة في الشات بدل DM
-            try:
-                channel = discord.utils.get(member.guild.text_channels, name="general")
-                if channel is None:
-                    channel = member.guild.system_channel
-                if channel:
-                    await channel.send(f"🔇 {member.mention} you are deafened! You will be moved to AFK after 1 hour.")
-            except:
-                pass
-        except Exception as e:
-            print(f"❌ خطأ في إرسال الرسالة: {e}")
+        except:
+            print(f"❌ ما قدرتش نرسل رسالة لـ {member.display_name} (DM مقفل)")
     
-    # ===== نستنى ساعة كاملة (3600 ثانية) باش نحرك =====
+    # نستنى ساعة كاملة (3600 ثانية) باش نحرك
     await asyncio.sleep(3600)  # ساعة = 3600 ثانية
     
     # نتحقق مرة أخرى
@@ -648,15 +636,10 @@ async def afk_monitor(member):
         await member.move_to(afk_channel, reason="Self-Deaf لمدة ساعة")
         print(f"🚀 تم نقل {member.display_name} إلى روم AFK")
         
-        # ===== نرسل رسالة في الشات =====
+        # نرسل رسالة في الشات
         channel = discord.utils.get(member.guild.text_channels, name="general")
         if channel is None:
             channel = member.guild.system_channel
-        if channel is None:
-            for ch in member.guild.text_channels:
-                if ch.permissions_for(member.guild.me).send_messages:
-                    channel = ch
-                    break
         
         if channel:
             await channel.send(f"🔇 {member.mention} تم نقله إلى **AFK** بعد ساعة من الـ Self-Deaf.")
