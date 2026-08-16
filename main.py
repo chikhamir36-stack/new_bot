@@ -389,7 +389,7 @@ async def dm(ctx, member: discord.Member, *, message: str):
             description=message,
             color=discord.Color.blue()
         )
-        embed.set_footer(text=f"من: {ctx.author.display_name} • {ctx.guild.name}")
+        embed.set_footer(text=f"from: {ctx.author.display_name} • {ctx.guild.name}")
         embed.set_thumbnail(url=ctx.guild.icon.url if ctx.guild.icon else None)
         
         await member.send(embed=embed)
@@ -404,7 +404,7 @@ async def dm(ctx, member: discord.Member, *, message: str):
 @commands.is_owner()
 async def dmrole(ctx, role: discord.Role, *, message: str):
     """يبعث رسالة خاصة لجميع أعضاء دور معين"""
-    confirm_msg = await ctx.send(f"⚠️ **You are about to send a DM to {len(role.members)} member ** In a role {role.mention}\nmessage : \"{message}\"\n\nReply with **yes** Confirmation or **no** to cancel  (30 ثانية)")
+    confirm_msg = await ctx.send(f"⚠️ **You are about to send a DM to {len(role.members)} member ** In a role {role.mention}\nmessage : \"{message}\"\n\nReply with **yes** Confirmation or **no** to cancel  (30 S )")
     
     def check(m):
         return m.author == ctx.author and m.channel == ctx.channel and m.content.lower() in ['yes', 'no']
@@ -450,7 +450,7 @@ async def dmall(ctx, *, message: str):
     """يبعث رسالة خاصة لجميع الأعضاء (باستثناء البوتات)"""
     members = [m for m in ctx.guild.members if not m.bot]
     
-    confirm_msg = await ctx.send(f"⚠️ **You are about to send a DM to {len(members)} member **\nmessage: \"{message}\"\n\nReply with **yes** To confirm or **no** Cancel (30 ثانية)")
+    confirm_msg = await ctx.send(f"⚠️ **You are about to send a DM to {len(members)} member **\nmessage: \"{message}\"\n\nReply with **yes** To confirm or **no** Cancel (30 S)")
     
     def check(m):
         return m.author == ctx.author and m.channel == ctx.channel and m.content.lower() in ['yes', 'no']
@@ -563,7 +563,7 @@ async def on_voice_state_update(member, before, after):
         # العضو ألغى الـ Self-Deaf
         if member.id in afk_tracker:
             del afk_tracker[member.id]
-            print(f"🔊 {member.display_name} ألغى Self-Deaf")
+            print(f"🔊 {member.display_name} cancel Self-Deaf")
 
 
 async def afk_monitor(member):
@@ -601,10 +601,10 @@ async def afk_monitor(member):
             embed.set_footer(text="🔊 Unmute yourself to cancel AFK")
             
             await member.send(embed=embed)
-            print(f"📩 تم إرسال رسالة AFK لـ {member.display_name}")
+            print(f"📩AFK message sent to{member.display_name}")
             
         except:
-            print(f"❌ ما قدرتش نرسل رسالة لـ {member.display_name} (DM مقفل)")
+            print(f"❌ i cant send message to {member.display_name} (DM locked)")
     
     # نستنى ساعة كاملة (3600 ثانية) باش نحرك
     await asyncio.sleep(3600)  # ساعة = 3600 ثانية
@@ -633,23 +633,23 @@ async def afk_monitor(member):
             print("✅ تم إنشاء روم AFK")
         
         # نحرك العضو
-        await member.move_to(afk_channel, reason="Self-Deaf لمدة ساعة")
-        print(f"🚀 تم نقل {member.display_name} إلى روم AFK")
+        await member.move_to(afk_channel, reason="Self-Deaf For one hour ")
+        print(f"🚀{member.display_name} has been moved to afk ")
         
         # نرسل رسالة في الشات
-        channel = discord.utils.get(member.guild.text_channels, name="general")
+        channel = discord.utils.get(member.guild.text_channels, name="logs")
         if channel is None:
             channel = member.guild.system_channel
         
         if channel:
-            await channel.send(f"🔇 {member.mention} تم نقله إلى **AFK** بعد ساعة من الـ Self-Deaf.")
+            await channel.send(f"🔇 {member.mention} He was transferred to **AFK** one hour after the Self-Deaf.")
         
         # نحذف من التراكر
         if member.id in afk_tracker:
             del afk_tracker[member.id]
             
     except Exception as e:
-        print(f"❌ خطأ في نقل العضو: {e}")
+        print(f"❌ Organ transfer error: {e}")
 
 
 # ==========================
@@ -683,7 +683,7 @@ async def on_ready():
                         invite_data[inviter_id] = 0
                     invite_data[inviter_id] += invite.uses
         except Exception as e:
-            print(f"❌ خطأ في تحميل الدعوات: {e}")
+            print(f"❌ Error loading invitations: {e}")
     print("📊 Invite data loaded!")
 
 @bot.event
@@ -713,11 +713,11 @@ async def on_member_join(member):
                         # نزيد عدد الدعوات للداعي
                         inviter_id = str(inviter.id)
                         invite_data[inviter_id] = invite_data.get(inviter_id, 0) + 1
-                        print(f"✅ {inviter.display_name} دعا {member.display_name}")
+                        print(f"✅ {inviter.display_name} invite {member.display_name}")
                         
                         # نبعث رسالة للداعي
                         try:
-                            await inviter.send(f"🎉 {member.display_name} دخل السيرفر بدعوتك! عدد دعواتك الآن: {invite_data[inviter_id]}")
+                            await inviter.send(f"🎉 {member.display_name} You entered the server with your invitation! Your current number of invitations: {invite_data[inviter_id]}")
                         except:
                             pass
                         break
@@ -802,10 +802,10 @@ async def reset_invites(ctx, member: discord.Member = None):
     """يعيد ضبط دعوات عضو (للـ Owner فقط)"""
     
     if member is None:
-        return await ctx.send("❌ حدد العضو: `!reset_invites @user`")
+        return await ctx.send("❌ identif the member: `!reset_invites @user`")
     
     invite_data[str(member.id)] = 0
-    await ctx.send(f"✅ تم إعادة ضبط دعوات {member.mention}")
+    await ctx.send(f"✅The invitations have been reset {member.mention}")
 
 @bot.command()
 @commands.is_owner()
@@ -813,10 +813,10 @@ async def set_invites(ctx, member: discord.Member, count: int):
     """يحدد عدد دعوات عضو (للـ Owner فقط)"""
     
     if count < 0:
-        return await ctx.send("❌ العدد يجب أن يكون موجباً!")
+        return await ctx.send("❌ The number must be positive!")
     
     invite_data[str(member.id)] = count
-    await ctx.send(f"✅ تم تحديث دعوات {member.mention} إلى `{count}`")
+    await ctx.send(f"✅ The invitations have been {member.mention} to `{count}`")
 
 # ==========================
 # 📦 أمر !embed (النسخة الكاملة)
