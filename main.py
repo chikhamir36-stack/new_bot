@@ -862,29 +862,7 @@ async def embed(ctx, *, message: str):
     
     # نبعث الـ Embed
     await ctx.send(embed=embed)
-    client.on("guildMemberAdd", async (member) => {
-  const channel = member.guild.channels.cache.get("ID_CHANNEL_LOGS"); // اختياري
-
-  const embed = new EmbedBuilder()
-    .setColor("#00FF00")
-    .setTitle("👋 Welcome to the server!")
-    .setDescription(`**${member.user.username}**, we hope you have a pleasant time with us`)
-    .addFields(
-      { name: "📅Date of joining", value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: true },
-      { name: "👤Number of members", value: `${member.guild.memberCount}`, inline: true }
-    )
-    .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
-    .setFooter({ text: "We welcome all new members 💙" });
-
-  try {
-    await member.send({ embeds: [embed] });
-    if (channel) channel.send(`✅ Sending a welcome message to ${member.user.tag}`);
-  } catch (err) {
-    console.error("ما قدرتش نرسل DM:", err);
-    if (channel) channel.send(`❌ I couldn't send a private message to  ${member.user.tag}`);
-  }
-});
-
+  
 # ==========================
 # RUN BOT
 # ==========================
