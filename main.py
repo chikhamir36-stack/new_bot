@@ -45,7 +45,6 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 # OWNER ID
 # ==========================
 bot.owner_id = 1454256976048558240
-bot.freind_id = 1411277196785356861
 
 # ==========================
 # SETTINGS
@@ -382,7 +381,6 @@ async def clear_all(ctx, amount: int):
 # 6️⃣ أمر !dm
 @bot.command()
 @commands.is_owner()
-@commands.is_freind()
 async def dm(ctx, member: discord.Member, *, message: str):
     """يبعث رسالة خاصة لعضو واحد"""
     try:
