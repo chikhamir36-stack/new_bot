@@ -324,18 +324,18 @@ async def dm(ctx, member: discord.Member, *, message: str):
         embed.set_thumbnail(url=ctx.guild.icon.url if ctx.guild.icon else None)
         
         await member.send(embed=embed)
-        await ctx.send(f"✅ تم إرسال الرسالة إلى **{member.display_name}** بنجاح!")
+        await ctx.send(f"✅ The message was sent successfully! **{member.display_name}** ")
     except discord.Forbidden:
-        await ctx.send(f"❌ لا يمكنني إرسال رسالة لـ **{member.display_name}** (الـDM مقفل)")
+        await ctx.send(f"❌ I can't send a message to**{member.display_name}** (DM locked )")
     except Exception as e:
-        await ctx.send(f"❌ حدث خطأ: {str(e)}")
+        await ctx.send(f"❌error : {str(e)}")
 
 # 7️⃣ أمر !dmrole
 @bot.command()
 @commands.is_owner()
 async def dmrole(ctx, role: discord.Role, *, message: str):
     """يبعث رسالة خاصة لجميع أعضاء دور معين"""
-    confirm_msg = await ctx.send(f"⚠️ **أنت على وشك إرسال DM لـ {len(role.members)} عضو** في دور {role.mention}\nالرسالة: \"{message}\"\n\nرد بـ **yes** للتأكيد أو **no** للإلغاء (30 ثانية)")
+    confirm_msg = await ctx.send(f"⚠️ **You are about to send a DM to {len(role.members)} member ** In a role {role.mention}\nmessage : \"{message}\"\n\nReply with **yes** Confirmation or **no** to cancel  (30 ثانية)")
     
     def check(m):
         return m.author == ctx.author and m.channel == ctx.channel and m.content.lower() in ['yes', 'no']
@@ -344,9 +344,9 @@ async def dmrole(ctx, role: discord.Role, *, message: str):
         response = await bot.wait_for('message', timeout=30.0, check=check)
         
         if response.content.lower() == 'no':
-            return await ctx.send("❌ تم الإلغاء.")
+            return await ctx.send("❌Cancelled.")
         
-        await ctx.send(f"⏳ جاري إرسال الرسائل إلى {len(role.members)} عضو...")
+        await ctx.send(f"⏳Messages are being sent to {len(role.members)} member ...")
         
         success_count = 0
         fail_count = 0
@@ -356,7 +356,7 @@ async def dmrole(ctx, role: discord.Role, *, message: str):
             description=message,
             color=discord.Color.green()
         )
-        embed.set_footer(text=f"من: {ctx.author.display_name} • {ctx.guild.name}")
+        embed.set_footer(text=f"from: {ctx.author.display_name} • {ctx.guild.name}")
         embed.set_thumbnail(url=ctx.guild.icon.url if ctx.guild.icon else None)
         
         for member in role.members:
@@ -369,10 +369,10 @@ async def dmrole(ctx, role: discord.Role, *, message: str):
             except:
                 fail_count += 1
         
-        await ctx.send(f"✅ **تم الإرسال بنجاح!**\n✅ نجح: {success_count}\n❌ فشل: {fail_count}")
+        await ctx.send(f"✅ **Sent successfully!**\n✅succeeded: {success_count}\n❌ fail: {fail_count}")
         
     except asyncio.TimeoutError:
-        await ctx.send("⏰ انتهى الوقت! تم الإلغاء.")
+        await ctx.send("⏰Time's up! Cancelled.")
 
 # 8️⃣ أمر !dmall
 @bot.command()
@@ -381,7 +381,7 @@ async def dmall(ctx, *, message: str):
     """يبعث رسالة خاصة لجميع الأعضاء (باستثناء البوتات)"""
     members = [m for m in ctx.guild.members if not m.bot]
     
-    confirm_msg = await ctx.send(f"⚠️ **أنت على وشك إرسال DM لـ {len(members)} عضو**\nالرسالة: \"{message}\"\n\nرد بـ **yes** للتأكيد أو **no** للإلغاء (30 ثانية)")
+    confirm_msg = await ctx.send(f"⚠️ **You are about to send a DM to {len(members)} member **\nmessage: \"{message}\"\n\nReply with **yes** To confirm or **no** Cancel (30 ثانية)")
     
     def check(m):
         return m.author == ctx.author and m.channel == ctx.channel and m.content.lower() in ['yes', 'no']
@@ -390,9 +390,9 @@ async def dmall(ctx, *, message: str):
         response = await bot.wait_for('message', timeout=30.0, check=check)
         
         if response.content.lower() == 'no':
-            return await ctx.send("❌ تم الإلغاء.")
+            return await ctx.send("❌ Cancelled.")
         
-        await ctx.send(f"⏳ جاري إرسال الرسائل إلى {len(members)} عضو...")
+        await ctx.send(f"⏳ Messages are being sent to {len(members)} member ...")
         
         success_count = 0
         fail_count = 0
@@ -402,7 +402,7 @@ async def dmall(ctx, *, message: str):
             description=message,
             color=discord.Color.green()
         )
-        embed.set_footer(text=f"من: {ctx.author.display_name} • {ctx.guild.name}")
+        embed.set_footer(text=f"from: {ctx.author.display_name} • {ctx.guild.name}")
         embed.set_thumbnail(url=ctx.guild.icon.url if ctx.guild.icon else None)
         
         for member in members:
@@ -413,30 +413,10 @@ async def dmall(ctx, *, message: str):
             except:
                 fail_count += 1
         
-        await ctx.send(f"✅ **تم الإرسال بنجاح!**\n✅ نجح: {success_count}\n❌ فشل: {fail_count}")
+        await ctx.send(f"✅ **Sent successfully!**\n✅  succeeded: {success_count}\n❌fail: {fail_count}")
         
     except asyncio.TimeoutError:
-        await ctx.send("⏰ انتهى الوقت! تم الإلغاء.")
-
-# 9️⃣ أمر !dmwithreason
-@bot.command()
-@commands.is_owner()
-async def dmwithreason(ctx, member: discord.Member, *, message: str):
-    """يبعث رسالة خاصة مع سبب (للتحذيرات مثلاً)"""
-    try:
-        embed = discord.Embed(
-            title="📩  Message from 𝙳𝚎𝚊𝚝𝚑 𝚆𝚑𝚒𝚜𝚙𝚎𝚛 𝙲𝚘𝚖𝚖𝚞𝚗𝚒𝚝𝚢",
-            description=message,
-            color=discord.Color.red()
-        )
-        embed.add_field(name="📌 سبب", value="تم إرسال هذه الرسالة للإشعار", inline=False)
-        embed.set_footer(text=f"من: {ctx.author.display_name} • {ctx.guild.name}")
-        
-        await member.send(embed=embed)
-        await ctx.send(f"✅ تم إرسال الرسالة إلى **{member.display_name}** مع سبب!")
-    except:
-        await ctx.send(f"❌ لا يمكن إرسال رسالة لـ **{member.display_name}**")
-
+        await ctx.send("⏰ime's up! Cancelled.")
 
 
 # ==========================
@@ -480,37 +460,7 @@ async def on_message(message):
                     warnings[message.author.id] = 0
                 return
     await bot.process_commands(message)
-# ==========================
-# 📸 أمر !photo (نسخة Embed)
-# ==========================
 
-@bot.command()
-@commands.is_owner()
-async def photo(ctx):
-    """
-    يعلق المستخدم صورة، البوت يحذف الرسالة ويعيد نشر الصورة في Embed
-    """
-    
-    if not ctx.message.attachments:
-        return await ctx.send("❌ أرفق صورة مع الأمر!", delete_after=5)
-    
-    attachment = ctx.message.attachments[0]
-    
-    try:
-        await ctx.message.delete()
-        
-        # نعمل Embed
-        embed = discord.Embed(
-            color=discord.Color.blue()
-        )
-        # نضيف الصورة
-        embed.set_image(url=attachment.url)
-        embed.set_footer(text=f"📸 طلب من: {ctx.author.display_name}")
-        
-        await ctx.send(embed=embed)
-        
-    except Exception as e:
-        await ctx.send(f"❌ حدث خطأ: {str(e)}", delete_after=5)
         # ==========================
 # 🛏️ نظام AFK (Self-Deaf)
 # ==========================
@@ -634,15 +584,88 @@ async def afk_monitor(member):
 
 
 # ==========================
-# 📊 LEADERBOARD (للكل)
+# 📊 LEADERBOARD (للكل) - النسخة المتطورة
 # ==========================
 
-@bot.command()  # شلنا @commands.is_owner()
+# متغيرات لتتبع الدعوات
+invite_data = {}  # {user_id: invites_count}
+invite_cache = {}  # {guild_id: {invite_code: invite_object}}
+
+@bot.event
+async def on_ready():
+    print(f"✅ Logged in as {bot.user}")
+    print(f"✅ Bot is ready!")
+    print(f"✅ Connected to {len(bot.guilds)} guilds")
+    print(f"👑 Owner ID: {bot.owner_id}")
+    
+    # 📊 تحميل بيانات الدعوات
+    for guild in bot.guilds:
+        try:
+            invites = await guild.invites()
+            # نخزن الدعوات في الكاش
+            invite_cache[guild.id] = {}
+            for invite in invites:
+                invite_cache[guild.id][invite.code] = invite
+                
+                # نخزن عدد الدعوات لكل عضو
+                if invite.inviter:
+                    inviter_id = str(invite.inviter.id)
+                    if inviter_id not in invite_data:
+                        invite_data[inviter_id] = 0
+                    invite_data[inviter_id] += invite.uses
+        except Exception as e:
+            print(f"❌ خطأ في تحميل الدعوات: {e}")
+    print("📊 Invite data loaded!")
+
+@bot.event
+async def on_member_join(member):
+    """تحديث الدعوات عند دخول عضو جديد"""
+    
+    guild = member.guild
+    
+    # نتجاوز البوتات
+    if member.bot:
+        return
+    
+    try:
+        # نجيب الدعوات الجديدة
+        new_invites = await guild.invites()
+        
+        # نقارن مع الدعوات القديمة
+        for invite in new_invites:
+            # نبحث عن الدعوة اللي زاد فيها العدد
+            old_invite = invite_cache.get(guild.id, {}).get(invite.code)
+            
+            if old_invite:
+                # إذا زاد عدد الدعوات
+                if invite.uses > old_invite.uses:
+                    inviter = invite.inviter
+                    if inviter and not inviter.bot:
+                        # نزيد عدد الدعوات للداعي
+                        inviter_id = str(inviter.id)
+                        invite_data[inviter_id] = invite_data.get(inviter_id, 0) + 1
+                        print(f"✅ {inviter.display_name} دعا {member.display_name}")
+                        
+                        # نبعث رسالة للداعي
+                        try:
+                            await inviter.send(f"🎉 {member.display_name} دخل السيرفر بدعوتك! عدد دعواتك الآن: {invite_data[inviter_id]}")
+                        except:
+                            pass
+                        break
+        
+        # نحدث الكاش
+        for invite in new_invites:
+            invite_cache[guild.id][invite.code] = invite
+            
+    except Exception as e:
+        print(f"❌ خطأ في تحديث الدعوات: {e}")
+
+@bot.command()  # للكل
 async def leaderboard(ctx):
     """يعرض ترتيب الأعضاء حسب عدد الدعوات (للجميع)"""
     
     if not invite_data:
-        return await ctx.send("📊you dont have invites !")
+        return await ctx.send("📊 No invites found! Start inviting people!")
     
     # نرتب الدعوات من الأكبر للأصغر
     sorted_invites = sorted(invite_data.items(), key=lambda x: x[1], reverse=True)
@@ -651,7 +674,7 @@ async def leaderboard(ctx):
     top_10 = sorted_invites[:10]
     
     embed = discord.Embed(
-        title="🏆 leaderboad-invites",
+        title="🏆 Leaderboard - Invites",
         description="Top 10 Invited Members",
         color=discord.Color.gold()
     )
@@ -662,7 +685,7 @@ async def leaderboard(ctx):
             user = await bot.fetch_user(int(user_id))
             name = user.display_name
         except:
-            name = f" (ID: {user_id})"
+            name = f"Unknown User"
         
         if i == 1:
             medal = "🥇"
@@ -681,6 +704,97 @@ async def leaderboard(ctx):
     
     await ctx.send(embed=embed)
 
+# ==========================
+# أوامر إضافية للدعوات
+# ==========================
+
+@bot.command()
+async def invites(ctx, member: discord.Member = None):
+    """يعرض عدد دعوات عضو معين"""
+    
+    if member is None:
+        member = ctx.author
+    
+    count = invite_data.get(str(member.id), 0)
+    
+    embed = discord.Embed(
+        title="📊 Invites",
+        description=f"{member.mention} has **{count}** invites!",
+        color=discord.Color.blue()
+    )
+    embed.set_footer(text=f"Requested by: {ctx.author.display_name}")
+    embed.set_thumbnail(url=member.display_avatar.url)
+    
+    await ctx.send(embed=embed)
+
+@bot.command()
+@commands.is_owner()
+async def reset_invites(ctx, member: discord.Member = None):
+    """يعيد ضبط دعوات عضو (للـ Owner فقط)"""
+    
+    if member is None:
+        return await ctx.send("❌ حدد العضو: `!reset_invites @user`")
+    
+    invite_data[str(member.id)] = 0
+    await ctx.send(f"✅ تم إعادة ضبط دعوات {member.mention}")
+
+@bot.command()
+@commands.is_owner()
+async def set_invites(ctx, member: discord.Member, count: int):
+    """يحدد عدد دعوات عضو (للـ Owner فقط)"""
+    
+    if count < 0:
+        return await ctx.send("❌ العدد يجب أن يكون موجباً!")
+    
+    invite_data[str(member.id)] = count
+    await ctx.send(f"✅ تم تحديث دعوات {member.mention} إلى `{count}`")
+
+
+
+# ==========================
+# 📦 أمر !embed (النسخة الكاملة)
+# ==========================
+
+@bot.command()
+@commands.is_owner()
+async def embed(ctx, *, message: str):
+    """
+    يبعث رسالة في Embed مع إطار جميل
+    استعمل: !embed نص الرسالة
+    """
+    
+    # نقسم الرسالة إلى عنوان ووصف إذا كانت تحتوي على "|"
+    if "|" in message:
+        parts = message.split("|", 1)
+        title = parts[0].strip()
+        description = parts[1].strip()
+    else:
+        title = None
+        description = message
+    
+    # نعمل Embed
+    embed = discord.Embed(
+        title=title,
+        description=description,
+        color=discord.Color.blue()
+    )
+    
+    # نضيف معلومات إضافية
+    embed.set_footer(
+        text=f"📝 طلب من: {ctx.author.display_name}",
+        icon_url=ctx.author.display_avatar.url
+    )
+    
+    if ctx.guild.icon:
+        embed.set_thumbnail(url=ctx.guild.icon.url)
+    
+    embed.timestamp = discord.utils.utcnow()
+    
+    # نحذف رسالة المستخدم
+    await ctx.message.delete()
+    
+    # نبعث الـ Embed
+    await ctx.send(embed=embed)
 # ==========================
 # RUN BOT
 # ==========================
