@@ -91,6 +91,7 @@ async def on_ready():
 # HELLO COMMAND
 # ==========================
 @bot.command()
+@commands.is_owner()
 async def hello(ctx):
     await ctx.send(f'👋 Hello {ctx.author.mention}!')
 
@@ -104,51 +105,126 @@ async def write(ctx, *, message):
     await ctx.send(message)
 
 # ==========================
-# VOICE COMMANDS
+# 🎵 أوامر الصوت المتكاملة
 # ==========================
+
+# متغيرات لتتبع حالة البوت الصوتي
+last_voice_channel = {}  # {guild_id: channel_id}
+manual_leave = set()  # {guild_id} للغادرين يدوياً
+
 @bot.command()
 @commands.is_owner()
 async def join(ctx):
+    """يدخل البوت للروم الصوتي اللي انت فيه"""
+    
     if not ctx.author.voice:
-        return await ctx.send("❌ Join a voice channel first.")
+        return await ctx.send("❌ You must be in a voice channel first!")
+    
     channel = ctx.author.voice.channel
-    if ctx.voice_client:
-        await ctx.voice_client.move_to(channel)
-    else:
-        await channel.connect()
-    last_voice_channel[ctx.guild.id] = channel
-    await ctx.send(f"✅ Joined **{channel.name}**")
+    
+    permissions = channel.permissions_for(ctx.guild.me)
+    if not permissions.connect:
+        return await ctx.send("❌ I don't have permission to join that voice channel!")
+    if not permissions.speak:
+        return await ctx.send("❌ I don't have permission to speak in that voice channel!")
+    
+    try:
+        if ctx.voice_client:
+            await ctx.voice_client.move_to(channel)
+            await ctx.send(f"✅ Moved to **{channel.name}**")
+        else:
+            await channel.connect()
+            await ctx.send(f"✅ Joined **{channel.name}**")
+        
+        last_voice_channel[ctx.guild.id] = channel.id
+        
+        if ctx.guild.id in manual_leave:
+            manual_leave.remove(ctx.guild.id)
+            
+    except Exception as e:
+        await ctx.send(f"❌ Error: {str(e)}")
 
 @bot.command()
 @commands.is_owner()
 async def leave(ctx):
-    if ctx.voice_client:
-        manual_leave.add(ctx.guild.id)
+    """يخرج البوت من الروم الصوتي"""
+    
+    if not ctx.voice_client:
+        return await ctx.send("❌ I'm not in a voice channel!")
+    
+    manual_leave.add(ctx.guild.id)
+    
+    try:
         await ctx.voice_client.disconnect()
-        await ctx.send("👋 Left voice channel.")
+        await ctx.send("👋 Left voice channel!")
+        
+        if ctx.guild.id in last_voice_channel:
+            del last_voice_channel[ctx.guild.id]
+            
+    except Exception as e:
+        await ctx.send(f"❌ Error: {str(e)}")
 
 # ==========================
-# VOICE STATE UPDATE
+# إعادة الاتصال التلقائي
 # ==========================
+
 @bot.event
 async def on_voice_state_update(member, before, after):
+    """
+    يراقب حالة البوت الصوتي:
+    - إذا طلع بالغلط (Disconnect) يرجع تلقائياً
+    - إذا تحرك لروم آخر يتابعه
+    """
+    
+    # نتجاوز كل الأعضاء ما عدا البوت نفسه
     if member.id != bot.user.id:
         return
+    
     guild = member.guild
+    
+    # ===== إذا دخل البوت لروم =====
     if after.channel:
-        last_voice_channel[guild.id] = after.channel
+        last_voice_channel[guild.id] = after.channel.id
+        print(f"🔊 Bot moved to: {after.channel.name}")
         return
+    
+    # ===== إذا طلع البوت =====
+    # نتحقق إذا كان طلع يدوياً (أمر !leave)
     if guild.id in manual_leave:
         manual_leave.remove(guild.id)
+        print("👋 Bot left manually (via !leave)")
         return
+    
+    # ===== إذا طلع بالغلط (Disconnect) =====
     if before.channel and guild.id in last_voice_channel:
-        await asyncio.sleep(2)
+        await asyncio.sleep(3)  # نستنى 3 ثواني
+        
         try:
+            # نتحقق إذا البوت لسا خارج
             if guild.voice_client is None:
-                await last_voice_channel[guild.id].connect()
-                print("🔄 Reconnected.")
+                # نجيب الروم المخزن
+                channel = guild.get_channel(last_voice_channel[guild.id])
+                
+                if channel:
+                    # نرجع البوت للروم
+                    await channel.connect()
+                    print(f"🔄 Bot reconnected to: {channel.name}")
+                    
+                    # نرسل رسالة في الـ logs
+                    log_channel = discord.utils.get(guild.text_channels, name="logs")
+                    if log_channel:
+                        await log_channel.send("🔄 **Bot reconnected automatically!**")
+                        
         except Exception as e:
             print(f"❌ Reconnect error: {e}")
+
+# ==========================
+# الـ on_voice_state_update الأصلي (لنظام AFK)
+# ==========================
+
+# هذا الجزء يبقى كما هو (نظام AFK)
+# ولكن تأكد من أنك ما عندكش on_voice_state_update مكرر
+# إذا عندك واحد آخر، ادمجهم في واحد
 
 # ==========================
 # WARNINGS
