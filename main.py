@@ -781,7 +781,7 @@ async def embed(ctx, *, message: str):
     
     # نضيف معلومات إضافية
     embed.set_footer(
-        text=f"📝 طلب من: {ctx.author.display_name}",
+        text=f"📝 from: {ctx.author.display_name}",
         icon_url=ctx.author.display_avatar.url
     )
     
