@@ -219,14 +219,6 @@ async def on_voice_state_update(member, before, after):
             print(f"❌ Reconnect error: {e}")
 
 # ==========================
-# الـ on_voice_state_update الأصلي (لنظام AFK)
-# ==========================
-
-# هذا الجزء يبقى كما هو (نظام AFK)
-# ولكن تأكد من أنك ما عندكش on_voice_state_update مكرر
-# إذا عندك واحد آخر، ادمجهم في واحد
-
-# ==========================
 # WARNINGS
 # ==========================
 @bot.command()
@@ -537,7 +529,7 @@ async def on_message(message):
                 return
     await bot.process_commands(message)
 
-        # ==========================
+# ==========================
 # 🛏️ نظام AFK (Self-Deaf)
 # ==========================
 
@@ -825,8 +817,6 @@ async def set_invites(ctx, member: discord.Member, count: int):
     invite_data[str(member.id)] = count
     await ctx.send(f"✅ تم تحديث دعوات {member.mention} إلى `{count}`")
 
-
-
 # ==========================
 # 📦 أمر !embed (النسخة الكاملة)
 # ==========================
@@ -871,6 +861,7 @@ async def embed(ctx, *, message: str):
     
     # نبعث الـ Embed
     await ctx.send(embed=embed)
+
 # ==========================
 # RUN BOT
 # ==========================
