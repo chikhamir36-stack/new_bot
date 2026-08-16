@@ -1,2 +1,4 @@
-discord.py
+discord.py[voice]
+pynacl
 flask
+ffmpeg-python
