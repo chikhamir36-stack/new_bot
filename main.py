@@ -1,6 +1,7 @@
 import asyncio
 import re
 import os
+os.system("pip install pynacl")
 import sys
 import discord
 from datetime import timedelta
