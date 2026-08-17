@@ -863,6 +863,45 @@ async def embed(ctx, *, message: str):
     # نبعث الـ Embed
     await ctx.send(embed=embed)
 # ==========================
+# 8️⃣ أمر !lock (يقفل الشات)
+# ==========================
+@bot.command()
+@commands.has_permissions(manage_channels=True)
+async def lock(ctx):
+    """يقفل الشات (يمنع الأعضاء من الكتابة)"""
+    
+    channel = ctx.channel
+    
+    # نجيب صلاحيات @everyone
+    overwrite = channel.overwrites_for(ctx.guild.default_role)
+    overwrite.send_messages = False
+    
+    try:
+        await channel.set_permissions(ctx.guild.default_role, overwrite=overwrite)
+        await ctx.send(f"🔒 **{channel.mention} has been locked!**")
+    except:
+        await ctx.send("❌ I don't have permission to lock this channel!")
+
+# ==========================
+# 9️⃣ أمر !unlock (يفتح الشات)
+# ==========================
+@bot.command()
+@commands.has_permissions(manage_channels=True)
+async def unlock(ctx):
+    """يفتح الشات (يسمح للأعضاء بالكتابة)"""
+    
+    channel = ctx.channel
+    
+    # نجيب صلاحيات @everyone
+    overwrite = channel.overwrites_for(ctx.guild.default_role)
+    overwrite.send_messages = None  # نرجعها للوضع الافتراضي
+    
+    try:
+        await channel.set_permissions(ctx.guild.default_role, overwrite=overwrite)
+        await ctx.send(f"🔓 **{channel.mention} has been unlocked!**")
+    except:
+        await ctx.send("❌ I don't have permission to unlock this channel!")
+# ==========================
 # RUN BOT
 # ==========================
 TOKEN = os.getenv('DISCORD_TOKEN')
