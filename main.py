@@ -862,6 +862,224 @@ async def embed(ctx, *, message: str):
     
     # نبعث الـ Embed
     await ctx.send(embed=embed)
+    # ==========================
+# 9️⃣ أمر !unlock (يفتح الشات)
+# ==========================
+@bot.command()
+@commands.has_permissions(manage_channels=True)
+async def unlock(ctx):
+    """يفتح الشات (يسمح للأعضاء بالكتابة)"""
+    
+    channel = ctx.channel
+    
+    # نجيب صلاحيات @everyone
+    overwrite = channel.overwrites_for(ctx.guild.default_role)
+    overwrite.send_messages = None  # نرجعها للوضع الافتراضي
+    
+    try:
+        await channel.set_permissions(ctx.guild.default_role, overwrite=overwrite)
+        await ctx.send(f"🔓 **{channel.mention} has been unlocked!**")
+    except:
+        await ctx.send("❌ I don't have permission to unlock this channel!")
+# ==========================
+# 8️⃣ أمر !lock (يقفل الشات)
+# ==========================
+@bot.command()
+@commands.has_permissions(manage_channels=True)
+async def lock(ctx):
+    """يقفل الشات (يمنع الأعضاء من الكتابة)"""
+    
+    channel = ctx.channel
+    
+    # نجيب صلاحيات @everyone
+    overwrite = channel.overwrites_for(ctx.guild.default_role)
+    overwrite.send_messages = False
+    
+    try:
+        await channel.set_permissions(ctx.guild.default_role, overwrite=overwrite)
+        await ctx.send(f"🔒 **{channel.mention} has been locked!**")
+    except:
+        await ctx.send("❌ I don't have permission to lock this channel!")
+# ==========================
+# 7️⃣ أمر !serverinfo (معلومات السيرفر)
+# ==========================
+@bot.command()
+async def serverinfo(ctx):
+    """يعرض معلومات عن السيرفر"""
+    
+    guild = ctx.guild
+    
+    # إحصائيات الأعضاء
+    total_members = guild.member_count
+    humans = len([m for m in guild.members if not m.bot])
+    bots = total_members - humans
+    
+    # إحصائيات القنوات
+    text_channels = len(guild.text_channels)
+    voice_channels = len(guild.voice_channels)
+    categories = len(guild.categories)
+    
+    # الرتب
+    total_roles = len(guild.roles)
+    
+    embed = discord.Embed(
+        title=f"📊 Server Info - {guild.name}",
+        color=discord.Color.blue()
+    )
+    
+    if guild.icon:
+        embed.set_thumbnail(url=guild.icon.url)
+    
+    embed.add_field(name="👑 Owner", value=guild.owner.mention, inline=True)
+    embed.add_field(name="🆔 ID", value=guild.id, inline=True)
+    embed.add_field(name="📅 Created", value=guild.created_at.strftime("%Y-%m-%d"), inline=True)
+    embed.add_field(name="👥 Members", value=f"{total_members} (👤{humans} 🤖{bots})", inline=True)
+    embed.add_field(name="💬 Channels", value=f"📝{text_channels} 🔊{voice_channels} 📁{categories}", inline=True)
+    embed.add_field(name="🎭 Roles", value=total_roles, inline=True)
+    embed.add_field(name="🔗 Boost Level", value=guild.premium_tier, inline=True)
+    embed.add_field(name="⭐ Boost Count", value=guild.premium_subscription_count, inline=True)
+    
+    if guild.vanity_url:
+        embed.add_field(name="🔗 Vanity URL", value=guild.vanity_url, inline=False)
+    
+    embed.set_footer(text=f"Requested by: {ctx.author.display_name}")
+    embed.timestamp = datetime.datetime.utcnow()
+    
+    await ctx.send(embed=embed)
+# ==========================
+# 6️⃣ أمر !userinfo (معلومات عضو)
+# ==========================
+@bot.command()
+async def userinfo(ctx, member: discord.Member = None):
+    """يعرض معلومات عن عضو"""
+    
+    if member is None:
+        member = ctx.author
+    
+    # نجيب الرتب
+    roles = [r.mention for r in member.roles if r != ctx.guild.default_role]
+    roles_text = ", ".join(roles) if roles else "No roles"
+    
+    embed = discord.Embed(
+        title=f"👤 User Info - {member.display_name}",
+        color=member.color if member.color != discord.Color.default() else discord.Color.blue()
+    )
+    embed.set_thumbnail(url=member.display_avatar.url)
+    
+    embed.add_field(name="🆔 ID", value=member.id, inline=True)
+    embed.add_field(name="📛 Name", value=member.name, inline=True)
+    embed.add_field(name="🎭 Nickname", value=member.nick if member.nick else "None", inline=True)
+    embed.add_field(name="📅 Joined", value=member.joined_at.strftime("%Y-%m-%d %H:%M"), inline=True)
+    embed.add_field(name="📅 Created", value=member.created_at.strftime("%Y-%m-%d %H:%M"), inline=True)
+    embed.add_field(name="🎭 Roles", value=roles_text, inline=False)
+    embed.add_field(name="🤖 Bot", value="Yes" if member.bot else "No", inline=True)
+    embed.add_field(name="🔊 In Voice", value="Yes" if member.voice else "No", inline=True)
+    
+    embed.set_footer(text=f"Requested by: {ctx.author.display_name}")
+    embed.timestamp = datetime.datetime.utcnow()
+    
+    await ctx.send(embed=embed)
+# ==========================
+# 5️⃣ أمر !uptime
+# ==========================
+@bot.command()
+async def uptime(ctx):
+    """يعرض مدة تشغيل البوت"""
+    
+    # نحتاج متغير start_time في on_ready
+    # هني نستعمل وقت البوت
+    current_time = datetime.datetime.utcnow()
+    uptime_seconds = int((current_time - bot_start_time).total_seconds())
+    
+    days = uptime_seconds // 86400
+    hours = (uptime_seconds % 86400) // 3600
+    minutes = (uptime_seconds % 3600) // 60
+    seconds = uptime_seconds % 60
+    
+    embed = discord.Embed(
+        title="⏰ Uptime",
+        description=f"**{days}d** **{hours}h** **{minutes}m** **{seconds}s**",
+        color=discord.Color.green()
+    )
+    embed.set_footer(text=f"Bot: {bot.user.name}")
+    
+    await ctx.send(embed=embed)
+# ==========================
+# 3️⃣ أمر !photo (مع صور متعددة)
+# ==========================
+@bot.command()
+@commands.is_owner()
+async def photo(ctx):
+    """
+    يعلق صورة، البوت يحذف الرسالة ويعيد نشر الصورة
+    استعمل: !photo (مع صورة مرفقة)
+    """
+    
+    if not ctx.message.attachments:
+        return await ctx.send("❌ Attach a photo with the order!", delete_after=5)
+    
+    for attachment in ctx.message.attachments:
+        if attachment.content_type and attachment.content_type.startswith('image/'):
+            try:
+                await ctx.message.delete()
+                
+                embed = discord.Embed(
+                    color=discord.Color.blue()
+                )
+                embed.set_image(url=attachment.url)
+                embed.set_footer(text=f"📸 requested by: {ctx.author.display_name}")
+                
+                await ctx.send(embed=embed)
+                break
+            except Exception as e:
+                await ctx.send(f"❌ خطأ: {str(e)}", delete_after=5)
+# ==========================
+# 2️⃣ أمر !remind
+# ==========================
+@bot.command()
+async def remind(ctx, time: str, *, message: str):
+    """
+    يذكرك بعد وقت معين
+    استعمل: !remind 10m نص
+    استعمل: !remind 1h نص
+    استعمل: !remind 1d نص
+    """
+    
+    # نحول الوقت لثواني
+    seconds = 0
+    if time.endswith("s"):
+        seconds = int(time[:-1])
+    elif time.endswith("m"):
+        seconds = int(time[:-1]) * 60
+    elif time.endswith("h"):
+        seconds = int(time[:-1]) * 3600
+    elif time.endswith("d"):
+        seconds = int(time[:-1]) * 86400
+    else:
+        return await ctx.send("❌ use `10m`, `10h`, `10d`")
+    
+    if seconds < 5:
+        return await ctx.send("❌The time must be more than 5 seconds!")
+    
+    await ctx.send(f"⏰ **Reminder set!** I will remind you with `{message}` after `{time}` )
+    
+    # نستنى الوقت
+    await asyncio.sleep(seconds)
+    
+    # نبعث التذكير
+    embed = discord.Embed(
+        title="⏰ Reminder!",
+        description=f"**{ctx.author.mention}**\n{message}",
+        color=discord.Color.blue()
+    )
+    embed.set_footer(text=f"Time: {time}")
+    
+    try:
+        await ctx.author.send(embed=embed)
+        await ctx.send(f"✅ The reminder was sent to {ctx.author.mention} in the DM!")
+    except:
+        await ctx.send(f"⏰ {ctx.author.mention} {message} (DM locked)")
+
   
 # ==========================
 # RUN BOT
