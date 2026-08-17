@@ -4,12 +4,13 @@ import os
 os.system("pip install pynacl")
 import sys
 import discord
-from datetime import timedelta
+from datetime import timedelta, datetime
 from discord.ext import commands
 from flask import Flask
 from threading import Thread
 import json
 from typing import Optional
+import random
 
 # ==========================
 # FLASK KEEP-ALIVE
@@ -67,8 +68,13 @@ INVITE_REGEX = re.compile(
 # ==========================
 # READY
 # ==========================
+bot_start_time = None  # متغير وقت بداية البوت
+
 @bot.event
 async def on_ready():
+    global bot_start_time
+    bot_start_time = datetime.utcnow()
+    
     print(f"✅ Logged in as {bot.user}")
     print(f"✅ Bot is ready!")
     print(f"✅ Connected to {len(bot.guilds)} guilds")
@@ -538,7 +544,7 @@ async def on_message(message):
 afk_tracker = {}  # {user_id: {"start_time": timestamp, "message_sent": False, "channel_id": channel_id}}
 
 @bot.event
-async def on_voice_state_update(member, before, after):
+async def on_voice_state_update_afk(member, before, after):
     """يكتشف الـ Self-Deaf ويدير نظام AFK"""
     
     # نتجاوز البوتات
@@ -601,7 +607,7 @@ async def afk_monitor(member):
             embed.set_footer(text="🔊 Unmute yourself to cancel AFK")
             
             await member.send(embed=embed)
-            print(f"📩AFK message sent to{member.display_name}")
+            print(f"📩AFK message sent to {member.display_name}")
             
         except:
             print(f"❌ i cant send message to {member.display_name} (DM locked)")
@@ -862,151 +868,12 @@ async def embed(ctx, *, message: str):
     
     # نبعث الـ Embed
     await ctx.send(embed=embed)
-    # ==========================
-# 9️⃣ أمر !unlock (يفتح الشات)
+
 # ==========================
-@bot.command()
-@commands.has_permissions(manage_channels=True)
-async def unlock(ctx):
-    """يفتح الشات (يسمح للأعضاء بالكتابة)"""
-    
-    channel = ctx.channel
-    
-    # نجيب صلاحيات @everyone
-    overwrite = channel.overwrites_for(ctx.guild.default_role)
-    overwrite.send_messages = None  # نرجعها للوضع الافتراضي
-    
-    try:
-        await channel.set_permissions(ctx.guild.default_role, overwrite=overwrite)
-        await ctx.send(f"🔓 **{channel.mention} has been unlocked!**")
-    except:
-        await ctx.send("❌ I don't have permission to unlock this channel!")
+# 🚀 أوامر جديدة (مضافة)
 # ==========================
-# 8️⃣ أمر !lock (يقفل الشات)
-# ==========================
-@bot.command()
-@commands.has_permissions(manage_channels=True)
-async def lock(ctx):
-    """يقفل الشات (يمنع الأعضاء من الكتابة)"""
-    
-    channel = ctx.channel
-    
-    # نجيب صلاحيات @everyone
-    overwrite = channel.overwrites_for(ctx.guild.default_role)
-    overwrite.send_messages = False
-    
-    try:
-        await channel.set_permissions(ctx.guild.default_role, overwrite=overwrite)
-        await ctx.send(f"🔒 **{channel.mention} has been locked!**")
-    except:
-        await ctx.send("❌ I don't have permission to lock this channel!")
-# ==========================
-# 7️⃣ أمر !serverinfo (معلومات السيرفر)
-# ==========================
-@bot.command()
-async def serverinfo(ctx):
-    """يعرض معلومات عن السيرفر"""
-    
-    guild = ctx.guild
-    
-    # إحصائيات الأعضاء
-    total_members = guild.member_count
-    humans = len([m for m in guild.members if not m.bot])
-    bots = total_members - humans
-    
-    # إحصائيات القنوات
-    text_channels = len(guild.text_channels)
-    voice_channels = len(guild.voice_channels)
-    categories = len(guild.categories)
-    
-    # الرتب
-    total_roles = len(guild.roles)
-    
-    embed = discord.Embed(
-        title=f"📊 Server Info - {guild.name}",
-        color=discord.Color.blue()
-    )
-    
-    if guild.icon:
-        embed.set_thumbnail(url=guild.icon.url)
-    
-    embed.add_field(name="👑 Owner", value=guild.owner.mention, inline=True)
-    embed.add_field(name="🆔 ID", value=guild.id, inline=True)
-    embed.add_field(name="📅 Created", value=guild.created_at.strftime("%Y-%m-%d"), inline=True)
-    embed.add_field(name="👥 Members", value=f"{total_members} (👤{humans} 🤖{bots})", inline=True)
-    embed.add_field(name="💬 Channels", value=f"📝{text_channels} 🔊{voice_channels} 📁{categories}", inline=True)
-    embed.add_field(name="🎭 Roles", value=total_roles, inline=True)
-    embed.add_field(name="🔗 Boost Level", value=guild.premium_tier, inline=True)
-    embed.add_field(name="⭐ Boost Count", value=guild.premium_subscription_count, inline=True)
-    
-    if guild.vanity_url:
-        embed.add_field(name="🔗 Vanity URL", value=guild.vanity_url, inline=False)
-    
-    embed.set_footer(text=f"Requested by: {ctx.author.display_name}")
-    embed.timestamp = datetime.datetime.utcnow()
-    
-    await ctx.send(embed=embed)
-# ==========================
-# 6️⃣ أمر !userinfo (معلومات عضو)
-# ==========================
-@bot.command()
-async def userinfo(ctx, member: discord.Member = None):
-    """يعرض معلومات عن عضو"""
-    
-    if member is None:
-        member = ctx.author
-    
-    # نجيب الرتب
-    roles = [r.mention for r in member.roles if r != ctx.guild.default_role]
-    roles_text = ", ".join(roles) if roles else "No roles"
-    
-    embed = discord.Embed(
-        title=f"👤 User Info - {member.display_name}",
-        color=member.color if member.color != discord.Color.default() else discord.Color.blue()
-    )
-    embed.set_thumbnail(url=member.display_avatar.url)
-    
-    embed.add_field(name="🆔 ID", value=member.id, inline=True)
-    embed.add_field(name="📛 Name", value=member.name, inline=True)
-    embed.add_field(name="🎭 Nickname", value=member.nick if member.nick else "None", inline=True)
-    embed.add_field(name="📅 Joined", value=member.joined_at.strftime("%Y-%m-%d %H:%M"), inline=True)
-    embed.add_field(name="📅 Created", value=member.created_at.strftime("%Y-%m-%d %H:%M"), inline=True)
-    embed.add_field(name="🎭 Roles", value=roles_text, inline=False)
-    embed.add_field(name="🤖 Bot", value="Yes" if member.bot else "No", inline=True)
-    embed.add_field(name="🔊 In Voice", value="Yes" if member.voice else "No", inline=True)
-    
-    embed.set_footer(text=f"Requested by: {ctx.author.display_name}")
-    embed.timestamp = datetime.datetime.utcnow()
-    
-    await ctx.send(embed=embed)
-# ==========================
-# 5️⃣ أمر !uptime
-# ==========================
-@bot.command()
-async def uptime(ctx):
-    """يعرض مدة تشغيل البوت"""
-    
-    # نحتاج متغير start_time في on_ready
-    # هني نستعمل وقت البوت
-    current_time = datetime.datetime.utcnow()
-    uptime_seconds = int((current_time - bot_start_time).total_seconds())
-    
-    days = uptime_seconds // 86400
-    hours = (uptime_seconds % 86400) // 3600
-    minutes = (uptime_seconds % 3600) // 60
-    seconds = uptime_seconds % 60
-    
-    embed = discord.Embed(
-        title="⏰ Uptime",
-        description=f"**{days}d** **{hours}h** **{minutes}m** **{seconds}s**",
-        color=discord.Color.green()
-    )
-    embed.set_footer(text=f"Bot: {bot.user.name}")
-    
-    await ctx.send(embed=embed)
-# ==========================
-# 3️⃣ أمر !photo (مع صور متعددة)
-# ==========================
+
+# 1️⃣ أمر !photo
 @bot.command()
 @commands.is_owner()
 async def photo(ctx):
@@ -1033,9 +900,8 @@ async def photo(ctx):
                 break
             except Exception as e:
                 await ctx.send(f"❌ خطأ: {str(e)}", delete_after=5)
-# ==========================
+
 # 2️⃣ أمر !remind
-# ==========================
 @bot.command()
 async def remind(ctx, time: str, *, message: str):
     """
@@ -1061,7 +927,7 @@ async def remind(ctx, time: str, *, message: str):
     if seconds < 5:
         return await ctx.send("❌The time must be more than 5 seconds!")
     
-    await ctx.send(f"⏰ **Reminder set!** I will remind you with `{message}` after `{time}` )
+    await ctx.send(f"⏰ **Reminder set!** I will remind you with `{message}` after `{time}`")
     
     # نستنى الوقت
     await asyncio.sleep(seconds)
@@ -1080,20 +946,13 @@ async def remind(ctx, time: str, *, message: str):
     except:
         await ctx.send(f"⏰ {ctx.author.mention} {message} (DM locked)")
 
-  
-# ==========================
-# RUN BOT
-# ==========================
-TOKEN = os.getenv('DISCORD_TOKEN')
-if TOKEN is None:
-    print("❌ Error: DISCORD_TOKEN not found!")
-    sys.exit(1)
-
-print("🚀 Starting bot...")
-keep_alive()
-print("🤖 Bot is starting...")
-try:
-    bot.run(TOKEN)
-except Exception as e:
-    print(f"❌ Bot error: {e}")
-    sys.exit(1)
+# 3️⃣ أمر !uptime
+@bot.command()
+async def uptime(ctx):
+    """يعرض مدة تشغيل البوت"""
+    
+    if bot_start_time is None:
+        return await ctx.send("❌ Bot just started! Please wait a moment.")
+    
+    current_time = datetime.utcnow()
+    uptime_seconds
