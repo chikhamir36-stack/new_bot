@@ -902,6 +902,85 @@ async def unlock(ctx):
     except:
         await ctx.send("❌ I don't have permission to unlock this channel!")
 # ==========================
+# 7️⃣ أمر !serverinfo (معلومات السيرفر)
+# ==========================
+@bot.command()
+async def serverinfo(ctx):
+    """يعرض معلومات عن السيرفر"""
+    
+    guild = ctx.guild
+    
+    # إحصائيات الأعضاء
+    total_members = guild.member_count
+    humans = len([m for m in guild.members if not m.bot])
+    bots = total_members - humans
+    
+    # إحصائيات القنوات
+    text_channels = len(guild.text_channels)
+    voice_channels = len(guild.voice_channels)
+    categories = len(guild.categories)
+    
+    # الرتب
+    total_roles = len(guild.roles)
+    
+    embed = discord.Embed(
+        title=f"📊 Server Info - {guild.name}",
+        color=discord.Color.blue()
+    )
+    
+    if guild.icon:
+        embed.set_thumbnail(url=guild.icon.url)
+    
+    embed.add_field(name="👑 Owner", value=guild.owner.mention, inline=True)
+    embed.add_field(name="🆔 ID", value=guild.id, inline=True)
+    embed.add_field(name="📅 Created", value=guild.created_at.strftime("%Y-%m-%d"), inline=True)
+    embed.add_field(name="👥 Members", value=f"{total_members} (👤{humans} 🤖{bots})", inline=True)
+    embed.add_field(name="💬 Channels", value=f"📝{text_channels} 🔊{voice_channels} 📁{categories}", inline=True)
+    embed.add_field(name="🎭 Roles", value=total_roles, inline=True)
+    embed.add_field(name="🔗 Boost Level", value=guild.premium_tier, inline=True)
+    embed.add_field(name="⭐ Boost Count", value=guild.premium_subscription_count, inline=True)
+    
+    if guild.vanity_url:
+        embed.add_field(name="🔗 Vanity URL", value=guild.vanity_url, inline=False)
+    
+    embed.set_footer(text=f"Requested by: {ctx.author.display_name}")
+    embed.timestamp = datetime.datetime.utcnow()
+    
+    await ctx.send(embed=embed)
+# ==========================
+# 6️⃣ أمر !userinfo (معلومات عضو)
+# ==========================
+@bot.command()
+async def userinfo(ctx, member: discord.Member = None):
+    """يعرض معلومات عن عضو"""
+    
+    if member is None:
+        member = ctx.author
+    
+    # نجيب الرتب
+    roles = [r.mention for r in member.roles if r != ctx.guild.default_role]
+    roles_text = ", ".join(roles) if roles else "No roles"
+    
+    embed = discord.Embed(
+        title=f"👤 User Info - {member.display_name}",
+        color=member.color if member.color != discord.Color.default() else discord.Color.blue()
+    )
+    embed.set_thumbnail(url=member.display_avatar.url)
+    
+    embed.add_field(name="🆔 ID", value=member.id, inline=True)
+    embed.add_field(name="📛 Name", value=member.name, inline=True)
+    embed.add_field(name="🎭 Nickname", value=member.nick if member.nick else "None", inline=True)
+    embed.add_field(name="📅 Joined", value=member.joined_at.strftime("%Y-%m-%d %H:%M"), inline=True)
+    embed.add_field(name="📅 Created", value=member.created_at.strftime("%Y-%m-%d %H:%M"), inline=True)
+    embed.add_field(name="🎭 Roles", value=roles_text, inline=False)
+    embed.add_field(name="🤖 Bot", value="Yes" if member.bot else "No", inline=True)
+    embed.add_field(name="🔊 In Voice", value="Yes" if member.voice else "No", inline=True)
+    
+    embed.set_footer(text=f"Requested by: {ctx.author.display_name}")
+    embed.timestamp = datetime.datetime.utcnow()
+    
+    await ctx.send(embed=embed)
+# ==========================
 # RUN BOT
 # ==========================
 TOKEN = os.getenv('DISCORD_TOKEN')
