@@ -4,13 +4,12 @@ import os
 os.system("pip install pynacl")
 import sys
 import discord
-from datetime import timedelta, datetime
+from datetime import timedelta
 from discord.ext import commands
 from flask import Flask
 from threading import Thread
 import json
 from typing import Optional
-import random
 
 # ==========================
 # FLASK KEEP-ALIVE
@@ -68,13 +67,8 @@ INVITE_REGEX = re.compile(
 # ==========================
 # READY
 # ==========================
-bot_start_time = None  # متغير وقت بداية البوت
-
 @bot.event
 async def on_ready():
-    global bot_start_time
-    bot_start_time = datetime.utcnow()
-    
     print(f"✅ Logged in as {bot.user}")
     print(f"✅ Bot is ready!")
     print(f"✅ Connected to {len(bot.guilds)} guilds")
@@ -544,7 +538,7 @@ async def on_message(message):
 afk_tracker = {}  # {user_id: {"start_time": timestamp, "message_sent": False, "channel_id": channel_id}}
 
 @bot.event
-async def on_voice_state_update_afk(member, before, after):
+async def on_voice_state_update(member, before, after):
     """يكتشف الـ Self-Deaf ويدير نظام AFK"""
     
     # نتجاوز البوتات
@@ -607,7 +601,7 @@ async def afk_monitor(member):
             embed.set_footer(text="🔊 Unmute yourself to cancel AFK")
             
             await member.send(embed=embed)
-            print(f"📩AFK message sent to {member.display_name}")
+            print(f"📩AFK message sent to{member.display_name}")
             
         except:
             print(f"❌ i cant send message to {member.display_name} (DM locked)")
@@ -868,91 +862,19 @@ async def embed(ctx, *, message: str):
     
     # نبعث الـ Embed
     await ctx.send(embed=embed)
-
 # ==========================
-# 🚀 أوامر جديدة (مضافة)
+# RUN BOT
 # ==========================
+TOKEN = os.getenv('DISCORD_TOKEN')
+if TOKEN is None:
+    print("❌ Error: DISCORD_TOKEN not found!")
+    sys.exit(1)
 
-# 1️⃣ أمر !photo
-@bot.command()
-@commands.is_owner()
-async def photo(ctx):
-    """
-    يعلق صورة، البوت يحذف الرسالة ويعيد نشر الصورة
-    استعمل: !photo (مع صورة مرفقة)
-    """
-    
-    if not ctx.message.attachments:
-        return await ctx.send("❌ Attach a photo with the order!", delete_after=5)
-    
-    for attachment in ctx.message.attachments:
-        if attachment.content_type and attachment.content_type.startswith('image/'):
-            try:
-                await ctx.message.delete()
-                
-                embed = discord.Embed(
-                    color=discord.Color.blue()
-                )
-                embed.set_image(url=attachment.url)
-                embed.set_footer(text=f"📸 requested by: {ctx.author.display_name}")
-                
-                await ctx.send(embed=embed)
-                break
-            except Exception as e:
-                await ctx.send(f"❌ خطأ: {str(e)}", delete_after=5)
-
-# 2️⃣ أمر !remind
-@bot.command()
-async def remind(ctx, time: str, *, message: str):
-    """
-    يذكرك بعد وقت معين
-    استعمل: !remind 10m نص
-    استعمل: !remind 1h نص
-    استعمل: !remind 1d نص
-    """
-    
-    # نحول الوقت لثواني
-    seconds = 0
-    if time.endswith("s"):
-        seconds = int(time[:-1])
-    elif time.endswith("m"):
-        seconds = int(time[:-1]) * 60
-    elif time.endswith("h"):
-        seconds = int(time[:-1]) * 3600
-    elif time.endswith("d"):
-        seconds = int(time[:-1]) * 86400
-    else:
-        return await ctx.send("❌ use `10m`, `10h`, `10d`")
-    
-    if seconds < 5:
-        return await ctx.send("❌The time must be more than 5 seconds!")
-    
-    await ctx.send(f"⏰ **Reminder set!** I will remind you with `{message}` after `{time}`")
-    
-    # نستنى الوقت
-    await asyncio.sleep(seconds)
-    
-    # نبعث التذكير
-    embed = discord.Embed(
-        title="⏰ Reminder!",
-        description=f"**{ctx.author.mention}**\n{message}",
-        color=discord.Color.blue()
-    )
-    embed.set_footer(text=f"Time: {time}")
-    
-    try:
-        await ctx.author.send(embed=embed)
-        await ctx.send(f"✅ The reminder was sent to {ctx.author.mention} in the DM!")
-    except:
-        await ctx.send(f"⏰ {ctx.author.mention} {message} (DM locked)")
-
-# 3️⃣ أمر !uptime
-@bot.command()
-async def uptime(ctx):
-    """يعرض مدة تشغيل البوت"""
-    
-    if bot_start_time is None:
-        return await ctx.send("❌ Bot just started! Please wait a moment.")
-    
-    current_time = datetime.utcnow()
-    uptime_seconds
+print("🚀 Starting bot...")
+keep_alive()
+print("🤖 Bot is starting...")
+try:
+    bot.run(TOKEN)
+except Exception as e:
+    print(f"❌ Bot error: {e}")
+    sys.exit(1)
