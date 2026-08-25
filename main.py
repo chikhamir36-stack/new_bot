@@ -979,97 +979,145 @@ async def ping(ctx):
     latency = round(bot.latency * 1000)
     await ctx.send(f"🏓 Pong! `{latency}ms`")
 # ==========================
-# ⚖️ أمر !punish (عقوبات متكاملة)
+# 👋 نظام المغادرة والدعوات
 # ==========================
 
-@bot.command()
-@commands.has_permissions(administrator=True)
-async def punish(ctx, action: str, member: discord.Member, *, reason: str = "No reason provided"):
-    """أمر واحد للعقوبات (Ban - Kick - Timeout)"""
-    
-    if not ctx.guild.me.guild_permissions.administrator:
-        return await ctx.send("❌ البوت يحتاج صلاحية Administrator!")
-    
-    if member == ctx.author:
-        return await ctx.send("❌ ما تحبش تعاقب روحك!")
-    
-    if member.top_role >= ctx.author.top_role and ctx.author != ctx.guild.owner:
-        return await ctx.send("❌ ما تقدرش تعاقب شخص أعلى منك في الرتب!")
-    
-    # نجيب روم العقاب
-    punishment_channel = discord.utils.get(ctx.guild.text_channels, name="└🚫・𝗣𝚞𝚗𝚜𝚑𝚒𝚖𝚎𝚗𝚝")
-    
-    if punishment_channel is None:
-        overwrites = {
-            ctx.guild.default_role: discord.PermissionOverwrite(send_messages=False, read_messages=True),
-            ctx.guild.me: discord.PermissionOverwrite(send_messages=True, read_messages=True)
-        }
-        punishment_channel = await ctx.guild.create_text_channel(
-            name="└🚫・𝗣𝚞𝚗𝚜𝚑𝚒𝚖𝚎𝚗𝚝",
-            overwrites=overwrites,
-            reason="تم إنشاء روم العقاب"
-        )
-        await ctx.send("✅ تم إنشاء روم العقاب!")
-    
-    embed = discord.Embed(
-        title="⚖️ Punishment",
-        description=f"Member {member.mention} has been **{action.upper()}**.",
-        color=discord.Color.red()
-    )
-    embed.add_field(name="📌 Reason", value=reason, inline=False)
-    embed.add_field(name="👮 Executed By", value=f"{ctx.author.mention} (ID: {ctx.author.id})", inline=False)
-    embed.set_footer(text="Death Whisper Community")
-    embed.timestamp = datetime.utcnow()
-    
-    try:
-        if action.lower() == "ban":
-            await member.ban(reason=reason)
-            embed.title = "⛔ Member BANNED"
-            embed.color = discord.Color.red()
-            
-        elif action.lower() == "kick":
-            await member.kick(reason=reason)
-            embed.title = "👢 Member KICKED"
-            embed.color = discord.Color.orange()
-            
-        elif action.lower() == "timeout":
-            try:
-                parts = reason.split()
-                if parts[0].isdigit():
-                    minutes = int(parts[0])
-                    reason = " ".join(parts[1:]) if len(parts) > 1 else "No reason"
-                else:
-                    minutes = 10
-            except:
-                minutes = 10
-                reason = "No reason provided"
-            
-            duration = timedelta(minutes=minutes)
-            await member.timeout(duration, reason=reason)
-            embed.title = f"🔇 Member TIMED OUT ({minutes}m)"
-            embed.color = discord.Color.orange()
-            embed.add_field(name="⏰ Duration", value=f"{minutes} minutes", inline=True)
-            
-        else:
-            return await ctx.send("❌ استعمل: `ban`, `kick`, أو `timeout`")
-        
-        await punishment_channel.send(embed=embed)
-        await ctx.send(f"✅ {member.mention} تم تطبيق العقوبة **{action.upper()}**!")
-        
+# متغيرات لتتبع الدعوات
+invite_cache = {}  # {guild_id: {invite_code: invite_object}}
+
+@bot.event
+async def on_ready():
+    """تحديث كاش الدعوات عند تشغيل البوت"""
+    global invite_cache
+    for guild in bot.guilds:
         try:
-            dm_embed = discord.Embed(
-                title=embed.title,
-                description=f"You have been **{action.upper()}** in **{ctx.guild.name}**",
-                color=embed.color
-            )
-            dm_embed.add_field(name="📌 Reason", value=reason, inline=False)
-            dm_embed.add_field(name="👮 Moderator", value=ctx.author.name, inline=True)
-            await member.send(embed=dm_embed)
+            invites = await guild.invites()
+            invite_cache[guild.id] = {}
+            for invite in invites:
+                invite_cache[guild.id][invite.code] = invite
         except:
             pass
+    print("📊 Invite cache loaded!")
+
+# ==========================
+# 1️⃣ عند دخول عضو (Invite)
+# ==========================
+
+@bot.event
+async def on_member_join(member):
+    """عند دخول عضو جديد - يكتب في روم الدعوات"""
+    
+    guild = member.guild
+    
+    # نتجاوز البوتات
+    if member.bot:
+        return
+    
+    # نجيب روم الدعوات
+    invite_channel = discord.utils.get(guild.text_channels, name="├💌・𝗜𝗻𝘃𝗶𝘁𝗲")
+    
+    # إذا مش موجود نعملو
+    if invite_channel is None:
+        overwrites = {
+            guild.default_role: discord.PermissionOverwrite(send_messages=True, read_messages=True),
+            guild.me: discord.PermissionOverwrite(send_messages=True, read_messages=True)
+        }
+        invite_channel = await guild.create_text_channel(
+            name="├💌・𝗜𝗻𝘃𝗶𝘁𝗲",
+            overwrites=overwrites,
+            reason="تم إنشاء روم الدعوات"
+        )
+        print("✅ تم إنشاء روم الدعوات!")
+    
+    try:
+        # نجيب الدعوات الجديدة
+        new_invites = await guild.invites()
+        inviter = None
+        
+        # نقارن مع الدعوات القديمة باش نعرف مين الداعي
+        for invite in new_invites:
+            old_invite = invite_cache.get(guild.id, {}).get(invite.code)
+            
+            if old_invite:
+                if invite.uses > old_invite.uses:
+                    inviter = invite.inviter
+                    break
+        
+        # نحدث الكاش
+        for invite in new_invites:
+            if guild.id not in invite_cache:
+                invite_cache[guild.id] = {}
+            invite_cache[guild.id][invite.code] = invite
+        
+        # إذا لقينا الداعي
+        if inviter and not inviter.bot:
+            embed = discord.Embed(
+                description=f"{member.mention} **Has Been Invited By** {inviter.mention}",
+                color=discord.Color.green()
+            )
+            embed.set_thumbnail(url=member.display_avatar.url)
+            embed.set_footer(text=f"ID: {member.id}")
+            embed.timestamp = datetime.utcnow()
+            
+            await invite_channel.send(embed=embed)
+        else:
+            # إذا ما لقينا الداعي (رابط عادي أو غير معروف)
+            embed = discord.Embed(
+                description=f"{member.mention} **Joined the server!**",
+                color=discord.Color.blue()
+            )
+            embed.set_thumbnail(url=member.display_avatar.url)
+            embed.set_footer(text=f"ID: {member.id}")
+            embed.timestamp = datetime.utcnow()
+            
+            await invite_channel.send(embed=embed)
+            
+    except Exception as e:
+        print(f"❌ خطأ في نظام الدعوات: {e}")
+
+# ==========================
+# 2️⃣ عند خروج عضو (Leave)
+# ==========================
+
+@bot.event
+async def on_member_remove(member):
+    """عند خروج عضو - يكتب في روم المغادرين"""
+    
+    guild = member.guild
+    
+    # نتجاوز البوتات
+    if member.bot:
+        return
+    
+    # نجيب روم المغادرين
+    leave_channel = discord.utils.get(guild.text_channels, name="├👋・𝐋𝐞𝐚𝐯𝐞𝐬")
+    
+    # إذا مش موجود نعملو
+    if leave_channel is None:
+        overwrites = {
+            guild.default_role: discord.PermissionOverwrite(send_messages=True, read_messages=True),
+            guild.me: discord.PermissionOverwrite(send_messages=True, read_messages=True)
+        }
+        leave_channel = await guild.create_text_channel(
+            name="├👋・𝐋𝐞𝐚𝐯𝐞𝐬",
+            overwrites=overwrites,
+            reason="تم إنشاء روم المغادرين"
+        )
+        print("✅ تم إنشاء روم المغادرين!")
+    
+    try:
+        embed = discord.Embed(
+            description=f"👋 **GODBYE** {member.mention}",
+            color=discord.Color.red()
+        )
+        embed.set_thumbnail(url=member.display_avatar.url)
+        embed.set_footer(text=f"ID: {member.id}")
+        embed.timestamp = datetime.utcnow()
+        
+        await leave_channel.send(embed=embed)
         
     except Exception as e:
-        await ctx.send(f"❌ خطأ: {str(e)}")
+        print(f"❌ خطأ في نظام المغادرة: {e}")
 # ==========================
 # RUN BOT
 # ==========================
