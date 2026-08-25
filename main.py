@@ -979,6 +979,128 @@ async def ping(ctx):
     latency = round(bot.latency * 1000)
     await ctx.send(f"🏓 Pong! `{latency}ms`")
 # ==========================
+# ⚖️ أمر !punish (عقوبات متكاملة)
+# ==========================
+
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def punish(ctx, action: str, member: discord.Member, *, reason: str = "No reason provided"):
+    """
+    أمر واحد للعقوبات (Ban - Kick - Timeout)
+    استعمل: !punish ban @user سبب
+    استعمل: !punish kick @user سبب
+    استعمل: !punish timeout @user 10 سبب
+    """
+    
+    # نتحقق من الصلاحيات
+    if not ctx.guild.me.guild_permissions.administrator:
+        return await ctx.send("❌ البوت يحتاج صلاحية Administrator!")
+    
+    if member == ctx.author:
+        return await ctx.send("❌ ما تحبش تعاقب روحك!")
+    
+    if member.top_role >= ctx.author.top_role and ctx.author != ctx.guild.owner:
+        return await ctx.send("❌ ما تقدرش تعاقب شخص أعلى منك في الرتب!")
+    
+    # ===== نجيب روم العقاب (Chat) =====
+    punishment_channel = discord.utils.get(ctx.guild.text_channels, name="└🚫・𝗣𝚞𝚗𝚜𝚑𝚒𝚖𝚎𝚗𝚝")
+    
+    # إذا مش موجود نعملو
+    if punishment_channel is None:
+        overwrites = {
+            ctx.guild.default_role: discord.PermissionOverwrite(send_messages=False, read_messages=True),
+            ctx.guild.me: discord.PermissionOverwrite(send_messages=True, read_messages=True)
+        }
+        punishment_channel = await ctx.guild.create_text_channel(
+            name="└🚫・𝗣𝚞𝚗𝚜𝚑𝚒𝚖𝚎𝚗𝚝",
+            overwrites=overwrites,
+            reason="تم إنشاء روم العقاب"
+        )
+        await ctx.send("✅ تم إنشاء روم العقاب!")
+    
+    # ===== نعمل Embed للعقوبة =====
+    embed = discord.Embed(
+        title="⚖️ Punishment",
+        description=f"Member {member.mention} has been **{action.upper()}**.",
+        color=discord.Color.red()
+    )
+    embed.add_field(name="📌 Reason", value=reason, inline=False)
+    embed.add_field(name="👮 Executed By", value=f"{ctx.author.mention} (ID: {ctx.author.id})", inline=False)
+    embed.set_footer(text="Death Whisper Community • If you have questions, contact staff")
+    embed.timestamp = datetime.utcnow()
+    
+    # ===== ننفذ العقوبة =====
+    try:
+        if action.lower() == "ban":
+            await member.ban(reason=reason)
+            embed.title = "⛔ Member BANNED"
+            embed.color = discord.Color.red()
+            
+        elif action.lower() == "kick":
+            await member.kick(reason=reason)
+            embed.title = "👢 Member KICKED"
+            embed.color = discord.Color.orange()
+            
+        elif action.lower() == "timeout":
+            # نتحقق من الوقت
+            try:
+                # نحاول ناخذ الوقت من السبب
+                parts = reason.split()
+                if parts[0].isdigit():
+                    minutes = int(parts[0])
+                    reason = " ".join(parts[1:]) if len(parts) > 1 else "No reason"
+                else:
+                    minutes = 10
+            except:
+                minutes = 10
+                reason = "No reason provided"
+            
+            duration = timedelta(minutes=minutes)
+            await member.timeout(duration, reason=reason)
+            embed.title = f"🔇 Member TIMED OUT ({minutes}m)"
+            embed.color = discord.Color.orange()
+            embed.add_field(name="⏰ Duration", value=f"{minutes} minutes", inline=True)
+            
+        else:
+            return await ctx.send("❌ استعمل: `ban`, `kick`, أو `timeout`")
+        
+        # ===== نرسل الرسالة في روم العقاب =====
+        await punishment_channel.send(embed=embed)
+        
+        # ===== تأكيد في الشات =====
+        await ctx.send(f"✅ {member.mention} تم تطبيق العقوبة **{action.upper()}**!\n📌 السبب: {reason}")
+        
+        # ===== نرسل DM للعضو =====
+        try:
+            dm_embed = discord.Embed(
+                title=embed.title,
+                description=f"You have been **{action.upper()}** in **{ctx.guild.name}**",
+                color=embed.color
+            )
+            dm_embed.add_field(name="📌 Reason", value=reason, inline=False)
+            dm_embed.add_field(name="👮 Moderator", value=ctx.author.name, inline=True)
+            dm_embed.set_footer(text="If you have questions, contact staff.")
+            
+            await member.send(embed=dm_embed)
+        except:
+            pass
+        
+        # ===== تسجيل في logs =====
+        log_channel = discord.utils.get(ctx.guild.text_channels, name="logs")
+        if log_channel:
+            log_embed = discord.Embed(
+                title="⚖️ Punishment Log",
+                color=discord.Color.red()
+            )
+            log_embed.add_field(name="Action", value=action.upper(), inline=True)
+            log_embed.add_field(name="Member", value=f"{member.mention} ({member.id})", inline=True)
+            log_embed.add_field(name="Moderator", value=f"{ctx.author.mention} ({ctx.author.id})", inline=True)
+            log_embed.add_field(name="Reason", value=reason, inline=False)
+            await log_channel.send(embed=log_embed)
+            
+    except Exception as e:
+        await ctx.send(f"❌ خطأ: {str(e)}")
+# ==========================
 # RUN BOT
 # ==========================
 TOKEN = os.getenv('DISCORD_TOKEN')
