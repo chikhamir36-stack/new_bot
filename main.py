@@ -1005,7 +1005,6 @@ async def punish(ctx, action: str, member: discord.Member, *, reason: str = "No 
     # ===== نجيب روم العقاب (Chat) =====
     punishment_channel = discord.utils.get(ctx.guild.text_channels, name="└🚫・𝗣𝚞𝚗𝚜𝚑𝚒𝚖𝚎𝚗𝚝")
     
-    # إذا مش موجود نعملو
     if punishment_channel is None:
         overwrites = {
             ctx.guild.default_role: discord.PermissionOverwrite(send_messages=False, read_messages=True),
