@@ -1043,7 +1043,6 @@ async def punish(ctx, action: str, member: discord.Member, *, reason: str = "No 
         elif action.lower() == "timeout":
             # نتحقق من الوقت
             try:
-                # نحاول ناخذ الوقت من السبب
                 parts = reason.split()
                 if parts[0].isdigit():
                     minutes = int(parts[0])
