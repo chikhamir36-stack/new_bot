@@ -982,41 +982,18 @@ async def ping(ctx):
 # 👋 نظام المغادرة والدعوات
 # ==========================
 
-# متغيرات لتتبع الدعوات
-invite_cache = {}  # {guild_id: {invite_code: invite_object}}
-
-@bot.event
-async def on_ready():
-    """تحديث كاش الدعوات عند تشغيل البوت"""
-    global invite_cache
-    for guild in bot.guilds:
-        try:
-            invites = await guild.invites()
-            invite_cache[guild.id] = {}
-            for invite in invites:
-                invite_cache[guild.id][invite.code] = invite
-        except:
-            pass
-    print("📊 Invite cache loaded!")
-
-# ==========================
-# 1️⃣ عند دخول عضو (Invite)
-# ==========================
-
 @bot.event
 async def on_member_join(member):
     """عند دخول عضو جديد - يكتب في روم الدعوات"""
     
     guild = member.guild
     
-    # نتجاوز البوتات
     if member.bot:
         return
     
     # نجيب روم الدعوات
     invite_channel = discord.utils.get(guild.text_channels, name="├💌・𝗜𝗻𝘃𝗶𝘁𝗲")
     
-    # إذا مش موجود نعملو
     if invite_channel is None:
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(send_messages=True, read_messages=True),
@@ -1030,11 +1007,9 @@ async def on_member_join(member):
         print("✅ تم إنشاء روم الدعوات!")
     
     try:
-        # نجيب الدعوات الجديدة
         new_invites = await guild.invites()
         inviter = None
         
-        # نقارن مع الدعوات القديمة باش نعرف مين الداعي
         for invite in new_invites:
             old_invite = invite_cache.get(guild.id, {}).get(invite.code)
             
@@ -1043,13 +1018,11 @@ async def on_member_join(member):
                     inviter = invite.inviter
                     break
         
-        # نحدث الكاش
         for invite in new_invites:
             if guild.id not in invite_cache:
                 invite_cache[guild.id] = {}
             invite_cache[guild.id][invite.code] = invite
         
-        # إذا لقينا الداعي
         if inviter and not inviter.bot:
             embed = discord.Embed(
                 description=f"{member.mention} **Has Been Invited By** {inviter.mention}",
@@ -1061,7 +1034,6 @@ async def on_member_join(member):
             
             await invite_channel.send(embed=embed)
         else:
-            # إذا ما لقينا الداعي (رابط عادي أو غير معروف)
             embed = discord.Embed(
                 description=f"{member.mention} **Joined the server!**",
                 color=discord.Color.blue()
@@ -1075,24 +1047,17 @@ async def on_member_join(member):
     except Exception as e:
         print(f"❌ خطأ في نظام الدعوات: {e}")
 
-# ==========================
-# 2️⃣ عند خروج عضو (Leave)
-# ==========================
-
 @bot.event
 async def on_member_remove(member):
     """عند خروج عضو - يكتب في روم المغادرين"""
     
     guild = member.guild
     
-    # نتجاوز البوتات
     if member.bot:
         return
     
-    # نجيب روم المغادرين
     leave_channel = discord.utils.get(guild.text_channels, name="├👋・𝐋𝐞𝐚𝐯𝐞𝐬")
     
-    # إذا مش موجود نعملو
     if leave_channel is None:
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(send_messages=True, read_messages=True),
