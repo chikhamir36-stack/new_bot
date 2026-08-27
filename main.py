@@ -982,6 +982,23 @@ async def ping(ctx):
 # 👋 نظام المغادرة والدعوات
 # ==========================
 
+# تعريف cache للدعوات
+invite_cache = {}
+
+@bot.event
+async def on_ready():
+    """تعبئة cache الدعوات عند تشغيل البوت"""
+    global invite_cache
+    for guild in bot.guilds:
+        try:
+            invites = await guild.invites()
+            invite_cache[guild.id] = {}
+            for invite in invites:
+                invite_cache[guild.id][invite.code] = invite
+            print(f"✅ تم تحميل دعوات سيرفر: {guild.name}")
+        except:
+            print(f"❌ لا يمكن تحميل دعوات سيرفر: {guild.name}")
+
 @bot.event
 async def on_member_join(member):
     """عند دخول عضو جديد - يكتب في روم الدعوات"""
@@ -1010,6 +1027,7 @@ async def on_member_join(member):
         new_invites = await guild.invites()
         inviter = None
         
+        # البحث عن الدعوة المستخدمة
         for invite in new_invites:
             old_invite = invite_cache.get(guild.id, {}).get(invite.code)
             
@@ -1018,11 +1036,13 @@ async def on_member_join(member):
                     inviter = invite.inviter
                     break
         
+        # تحديث cache
         for invite in new_invites:
             if guild.id not in invite_cache:
                 invite_cache[guild.id] = {}
             invite_cache[guild.id][invite.code] = invite
         
+        # إرسال الإمبيد
         if inviter and not inviter.bot:
             embed = discord.Embed(
                 description=f"{member.mention} **Has Been Invited By** {inviter.mention}",
