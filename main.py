@@ -979,604 +979,626 @@ async def ping(ctx):
     latency = round(bot.latency * 1000)
     await ctx.send(f"🏓 Pong! `{latency}ms`")
 # ==========================
-# 📊 LEVEL SYSTEM - FIXED
+# 📊 نظام المستويات (Level System) مع حفظ البيانات
 # ==========================
 
-import discord
-from discord.ext import commands, tasks
 import json
 import random
-from datetime import datetime
+from datetime import datetime, timedelta
+from discord.ext import tasks
+
+# ==========================
+# 📁 ملف البيانات
+# ==========================
 
 LEVEL_FILE = "level_data.json"
 
-user_data = {}
-level_rewards = {}
-voice_time = {}
-
-# Cooldown lel messages (anti spam)
-message_cooldowns = {}
-
+# متغيرات عامة
+user_data = {}  # {user_id: {"xp": 0, "level": 0}}
+level_rewards = {}  # {role_name: level}
+voice_time = {}  # {user_id: start_time}
 
 # ==========================
-# 💾 LOAD / SAVE
+# 💾 حفظ وتحميل البيانات
 # ==========================
 
 def load_levels():
+    """تحميل بيانات المستويات من الملف"""
     global user_data, level_rewards
-
     try:
-        with open(LEVEL_FILE, "r", encoding="utf-8") as f:
+        with open(LEVEL_FILE, "r") as f:
             data = json.load(f)
-
-        user_data = data.get("user_data", {})
-        level_rewards = data.get("level_rewards", {})
-
-        print("✅ Level data loaded!")
-
+            user_data = data.get("user_data", {})
+            level_rewards = data.get("level_rewards", {})
+        print("✅ Level data has been uploaded!")
     except FileNotFoundError:
         user_data = {}
         level_rewards = {}
-        save_levels()
-        print("📝 New level data created!")
-
-    except Exception as e:
-        print(f"❌ Error loading level data: {e}")
+        print("📝 A new data file has been created!")
+    except:
         user_data = {}
         level_rewards = {}
-
+        print("⚠️ Data loading error; new data created.!")
 
 def save_levels():
+    """حفظ بيانات المستويات في الملف"""
+    data = {
+        "user_data": user_data,
+        "level_rewards": level_rewards
+    }
     try:
-        data = {
-            "user_data": user_data,
-            "level_rewards": level_rewards
-        }
-
-        with open(LEVEL_FILE, "w", encoding="utf-8") as f:
+        with open(LEVEL_FILE, "w") as f:
             json.dump(data, f, indent=4)
-
+        print("💾Level data has been saved!")
     except Exception as e:
-        print(f"❌ Error saving level data: {e}")
+        print(f"❌ Data saving error : {e}")
 
+# تحميل البيانات عند التشغيل
+load_levels()
 
 # ==========================
-# 👤 USER DATA
+# 📊 دوال XP
 # ==========================
 
 def get_user(user_id):
+    """يجيب بيانات مستخدم"""
     user_id = str(user_id)
-
     if user_id not in user_data:
-        user_data[user_id] = {
-            "xp": 0,
-            "level": 0
-        }
-
+        user_data[user_id] = {"xp": 0, "level": 0}
+        save_levels()
     return user_data[user_id]
 
-
-# ==========================
-# ⭐ ADD XP
-# ==========================
-
 def add_xp(user_id, amount):
-
+    """يزيد نقاط المستخدم ويرجع True إذا ترقى"""
     user = get_user(user_id)
-
     user["xp"] += amount
-
-    leveled_up = False
-
-    # يسمح بأكثر من Level إذا XP كبير
-    while True:
-
-        xp_needed = (user["level"] + 1) * 100
-
-        if user["xp"] >= xp_needed:
-            user["xp"] -= xp_needed
-            user["level"] += 1
-            leveled_up = True
-        else:
-            break
-
+    
+    xp_needed = (user["level"] + 1) * 100
+    
+    if user["xp"] >= xp_needed:
+        user["xp"] = 0
+        user["level"] += 1
+        save_levels()
+        return True
     save_levels()
-
-    return leveled_up
-
+    return False
 
 # ==========================
-# 🎖️ LEVEL ROLE
+# 🎖️ إعطاء الرتب
 # ==========================
 
 async def check_rank(member):
-
+    """يعطي رتبة للعضو حسب مستواه"""
     user = get_user(member.id)
-    current_level = user["level"]
-
-    eligible_roles = []
-
-    for role_name, required_level in level_rewards.items():
-        if current_level >= required_level:
-            eligible_roles.append(
-                (role_name, required_level)
-            )
-
-    if not eligible_roles:
+    level = user["level"]
+    
+    role_to_give = None
+    for role_name, req_level in level_rewards.items():
+        if level >= req_level:
+            role_to_give = role_name
+    
+    if role_to_give is None:
         return
-
-    # أعلى Rank متاح
-    role_name, required_level = max(
-        eligible_roles,
-        key=lambda x: x[1]
-    )
-
-    role = discord.utils.get(
-        member.guild.roles,
-        name=role_name
-    )
-
+    
+    role = discord.utils.get(member.guild.roles, name=role_to_give)
     if role is None:
-        print(f"❌ Role not found: {role_name}")
-        return
-
+        try:
+            role = await member.guild.create_role(
+                name=role_to_give,
+                color=discord.Color.gold(),
+                reason=f"Level {level} reached"
+            )
+            print(f"✅ rank creation : {role_to_give}")
+        except:
+            return
+    
     if role not in member.roles:
         try:
-            await member.add_roles(
-                role,
-                reason=f"Reached Level {current_level}"
-            )
-
-            print(
-                f"🎖️ {member.display_name} received {role_name}"
-            )
-
-        except discord.Forbidden:
-            print("❌ Bot doesn't have permission to give roles!")
-
-        except Exception as e:
-            print(f"❌ Role error: {e}")
-
+            await member.add_roles(role, reason=f"Reached Level {level}")
+            print(f"🎖️ {member.display_name} got {role_to_give}")
+        except:
+            pass
 
 # ==========================
-# 📢 LEVEL UP MESSAGE
-# ==========================
-
-async def send_level_up(member):
-
-    user = get_user(member.id)
-    new_level = user["level"]
-
-    channel = discord.utils.get(
-        member.guild.text_channels,
-        name="└📊・𝐋𝐞𝐯𝐞𝐥-𝐔𝐏"
-    )
-
-    if channel is None:
-        return
-
-    embed = discord.Embed(
-        title="🎉 LEVEL UP!",
-        description=(
-            f"Congratulations {member.mention}!\n\n"
-            f"You reached **Level {new_level}** ⭐"
-        ),
-        color=discord.Color.gold()
-    )
-
-    embed.set_thumbnail(
-        url=member.display_avatar.url
-    )
-
-    embed.set_footer(
-        text="Keep chatting and earning XP! 🚀"
-    )
-
-    try:
-        await channel.send(embed=embed)
-    except:
-        pass
-
-    # DM
-    try:
-        dm = discord.Embed(
-            title="🎉 You Leveled Up!",
-            description=(
-                f"You reached **Level {new_level}** "
-                f"in **{member.guild.name}**!"
-            ),
-            color=discord.Color.gold()
-        )
-
-        await member.send(embed=dm)
-
-    except:
-        pass
-
-
-# ==========================
-# 💬 MESSAGE XP
+# 💬 XP من الكتابة
 # ==========================
 
 @bot.event
-async def on_message(message):
-
-    # Bot messages
+async def on_message_level(message):
+    """يزيد XP عند كتابة رسالة"""
     if message.author.bot:
         return
-
-    # DMs
-    if message.guild is None:
-        await bot.process_commands(message)
+    if not message.guild:
         return
-
-    # ======================
-    # ⭐ XP SYSTEM
-    # ======================
-
-    user_id = message.author.id
-    now = datetime.utcnow()
-
-    # 30 seconds cooldown
-    if user_id not in message_cooldowns:
-
-        message_cooldowns[user_id] = now
-
-        xp = random.randint(5, 10)
-
-        leveled = add_xp(
-            message.author.id,
-            xp
-        )
-
-        if leveled:
-
-            await check_rank(message.author)
-            await send_level_up(message.author)
-
-    else:
-
-        last_message = message_cooldowns[user_id]
-
-        seconds = (
-            now - last_message
-        ).total_seconds()
-
-        # يعطي XP كل 30 ثانية فقط
-        if seconds >= 30:
-
-            message_cooldowns[user_id] = now
-
-            xp = random.randint(5, 10)
-
-            leveled = add_xp(
-                message.author.id,
-                xp
+    
+    # إذا كان في روم AFK
+    if message.author.voice:
+        afk = discord.utils.get(message.guild.voice_channels, name="├😴・𝙰𝚏𝚔")
+        if message.author.voice.channel == afk:
+            return
+    
+    # زيادة XP (1-3 نقاط)
+    xp = random.randint(1, 3)
+    leveled = add_xp(message.author.id, xp)
+    
+    if leveled:
+        user = get_user(message.author.id)
+        new_level = user["level"]
+        
+        await check_rank(message.author)
+        
+        # روم الترقيات
+        channel = discord.utils.get(message.guild.text_channels, name="└📊・𝐋𝐞𝐯𝐞𝐥-𝐔𝐏")
+        if channel is None:
+            overwrites = {
+                message.guild.default_role: discord.PermissionOverwrite(send_messages=True, read_messages=True),
+                message.guild.me: discord.PermissionOverwrite(send_messages=True, read_messages=True)
+            }
+            channel = await message.guild.create_text_channel(
+                name="└📊・𝐋𝐞𝐯𝐞𝐥-𝐔𝐏",
+                overwrites=overwrites,
+                reason="تم إنشاء روم الترقيات"
             )
-
-            if leveled:
-
-                await check_rank(message.author)
-                await send_level_up(message.author)
-
-    # مهم جداً باش Commands يخدمو
-    await bot.process_commands(message)
-
+            print("✅ تم إنشاء روم Level-Up!")
+        
+        embed = discord.Embed(
+            title="🎉 Level Up!",
+            description=f"{message.author.mention} reached **Level {new_level}**!",
+            color=discord.Color.gold()
+        )
+        embed.set_thumbnail(url=message.author.display_avatar.url)
+        embed.set_footer(text="Keep going! 🚀")
+        await channel.send(embed=embed)
+        
+        # DM للعضو
+        try:
+            dm = discord.Embed(
+                title="🎉 You Leveled Up!",
+                description=f"Congratulations {message.author.name}! You reached **Level {new_level}**!",
+                color=discord.Color.gold()
+            )
+            await message.author.send(embed=dm)
+        except:
+            pass
 
 # ==========================
-# 🔊 VOICE XP
+# 🎵 XP من الصوت
 # ==========================
-
-def is_valid_voice_channel(channel):
-
-    if channel is None:
-        return False
-
-    # AFK channel
-    if channel.guild.afk_channel == channel:
-        return False
-
-    return True
-
 
 @bot.event
-async def on_voice_state_update(member, before, after):
-
+async def on_voice_state_update_level(member, before, after):
+    """يتتبع وقت التواجد في الرومات الصوتية"""
     if member.bot:
         return
-
-    user_id = str(member.id)
-
-    # ======================
-    # دخل Voice
-    # ======================
-
-    if before.channel is None and after.channel is not None:
-
-        if is_valid_voice_channel(after.channel):
-
-            voice_time[user_id] = datetime.utcnow()
-
+    
+    afk = discord.utils.get(member.guild.voice_channels, name="├😴・𝙰𝚏𝚔")
+    
+    # إذا دخل روم AFK
+    if after.channel == afk:
+        if str(member.id) in voice_time:
+            del voice_time[str(member.id)]
         return
-
-    # ======================
-    # خرج من Voice
-    # ======================
-
-    if before.channel is not None and after.channel is None:
-
-        if user_id in voice_time:
-
-            del voice_time[user_id]
-
-        return
-
-    # ======================
-    # تبديل Channel
-    # ======================
-
-    if before.channel != after.channel:
-
-        # دخل AFK
-        if not is_valid_voice_channel(after.channel):
-
-            voice_time.pop(user_id, None)
-
-        # خرج من AFK ودخل Voice
-        elif user_id not in voice_time:
-
-            voice_time[user_id] = datetime.utcnow()
-
+    
+    # إذا دخل روم صوتي
+    if after.channel and before.channel is None:
+        voice_time[str(member.id)] = datetime.utcnow()
+    
+    # إذا خرج من روم صوتي
+    elif before.channel and after.channel is None:
+        if str(member.id) in voice_time:
+            start = voice_time[str(member.id)]
+            diff = (datetime.utcnow() - start).total_seconds()
+            xp = int(diff // 60)
+            
+            if xp > 0:
+                leveled = add_xp(member.id, xp)
+                if leveled:
+                    await check_rank(member)
+                    
+                    channel = discord.utils.get(member.guild.text_channels, name="└📊・𝐋𝐞𝐯𝐞𝐥-𝐔𝐏")
+                    if channel is None:
+                        overwrites = {
+                            member.guild.default_role: discord.PermissionOverwrite(send_messages=True, read_messages=True),
+                            member.guild.me: discord.PermissionOverwrite(send_messages=True, read_messages=True)
+                        }
+                        channel = await member.guild.create_text_channel(
+                            name="└📊・𝐋𝐞𝐯𝐞𝐥-𝐔𝐏",
+                            overwrites=overwrites,
+                            reason="تم إنشاء روم الترقيات"
+                        )
+                    
+                    user = get_user(member.id)
+                    embed = discord.Embed(
+                        title="🎉 Level Up!",
+                        description=f"{member.mention} reached **Level {user['level']}** from voice!",
+                        color=discord.Color.gold()
+                    )
+                    await channel.send(embed=embed)
+            
+            del voice_time[str(member.id)]
 
 # ==========================
-# 🔄 VOICE XP EVERY 5 MINUTES
+# 🔄 تحديث كل 5 دقائق
 # ==========================
 
 @tasks.loop(minutes=5)
-async def update_voice_xp():
-
+async def update_voice_xp_level():
+    """تحديث نقاط الأعضاء في الرومات الصوتية"""
+    if not voice_time:
+        return
+    
     current_time = datetime.utcnow()
-
-    for guild in bot.guilds:
-
-        for channel in guild.voice_channels:
-
-            # تجاهل AFK
-            if guild.afk_channel == channel:
-                continue
-
-            for member in channel.members:
-
-                if member.bot:
-                    continue
-
-                user_id = str(member.id)
-
-                # إذا muted + deaf
-                # ما نعطيهش XP
-                if member.voice:
-
-                    if member.voice.self_deaf:
-                        continue
-
-                    if member.voice.self_mute:
-                        continue
-
-                # XP
-                leveled = add_xp(
-                    member.id,
-                    10
-                )
-
-                if leveled:
-
+    to_delete = []
+    
+    for user_id, start_time in voice_time.items():
+        diff = (current_time - start_time).total_seconds()
+        if diff >= 300:  # 5 دقائق
+            leveled = add_xp(int(user_id), 5)
+            voice_time[user_id] = current_time
+            
+            if leveled:
+                # نجيب العضو
+                member = None
+                for guild in bot.guilds:
+                    member = guild.get_member(int(user_id))
+                    if member:
+                        break
+                
+                if member:
                     await check_rank(member)
-                    await send_level_up(member)
-
-
-@update_voice_xp.before_loop
-async def before_voice_xp():
-
-    await bot.wait_until_ready()
-
+                    
+                    channel = discord.utils.get(member.guild.text_channels, name="└📊・𝐋𝐞𝐯𝐞𝐥-𝐔𝐏")
+                    if channel is None:
+                        overwrites = {
+                            member.guild.default_role: discord.PermissionOverwrite(send_messages=True, read_messages=True),
+                            member.guild.me: discord.PermissionOverwrite(send_messages=True, read_messages=True)
+                        }
+                        channel = await member.guild.create_text_channel(
+                            name="└📊・𝐋𝐞𝐯𝐞𝐥-𝐔𝐏",
+                            overwrites=overwrites,
+                            reason="تم إنشاء روم الترقيات"
+                        )
+                    
+                    user = get_user(member.id)
+                    embed = discord.Embed(
+                        title="🎉 Level Up!",
+                        description=f"{member.mention} reached **Level {user['level']}** from voice!",
+                        color=discord.Color.gold()
+                    )
+                    await channel.send(embed=embed)
 
 # ==========================
-# 🎯 SET ROLE
+# 🎯 أمر !set_role (يعمل)
 # ==========================
 
 @bot.command()
 @commands.has_permissions(administrator=True)
-async def set_role(
-    ctx,
-    role: discord.Role,
-    level: int
-):
-
+async def set_role(ctx, role: discord.Role, level: int):
+    """يحدد رتبة لمستوى معين"""
     if level < 1:
-        return await ctx.send(
-            "❌ Level must be 1 or higher!"
-        )
-
+        return await ctx.send("❌ The level must be greater than 0!")
+    
     level_rewards[role.name] = level
-
     save_levels()
-
+    
     embed = discord.Embed(
         title="✅ Role Set!",
-        description=(
-            f"{role.mention} → **Level {level}**"
-        ),
+        description=f"**{role.mention}** → Level **{level}**",
         color=discord.Color.green()
     )
-
     await ctx.send(embed=embed)
 
-
 # ==========================
-# 🗑️ REMOVE ROLE
+# 🎯 أمر !remove_role (يعمل)
 # ==========================
 
 @bot.command()
 @commands.has_permissions(administrator=True)
-async def remove_role(
-    ctx,
-    role: discord.Role
-):
-
+async def remove_role(ctx, role: discord.Role):
+    """يحذف رتبة من نظام المستويات"""
     if role.name not in level_rewards:
-
-        return await ctx.send(
-            f"❌ {role.mention} is not in the level system!"
-        )
-
+        return await ctx.send(f"❌ {role.mention} Not found!")
+    
     del level_rewards[role.name]
-
     save_levels()
-
-    await ctx.send(
-        f"✅ {role.mention} removed from level rewards!"
+    
+    embed = discord.Embed(
+        title="✅ Role Removed!",
+        description=f"**{role.mention}** has been removed",
+        color=discord.Color.red()
     )
-
+    await ctx.send(embed=embed)
 
 # ==========================
-# 📊 LEVEL COMMAND
+# 🎯 أمر !level_roles (يعمل)
 # ==========================
 
 @bot.command()
-async def level(
-    ctx,
-    member: discord.Member = None
-):
-
-    if member is None:
-        member = ctx.author
-
-    user = get_user(member.id)
-
-    current_level = user["level"]
-    xp = user["xp"]
-
-    xp_needed = (
-        current_level + 1
-    ) * 100
-
-    progress = int(
-        (xp / xp_needed) * 100
-    )
-
+async def level_roles(ctx):
+    """يعرض كل الرتب والمستويات"""
+    if not level_rewards:
+        return await ctx.send("📊 No roles set yet! Use `!set_role @role level`")
+    
     embed = discord.Embed(
-        title=f"📊 {member.display_name}'s Level",
+        title="🎖️ Level Roles",
         color=discord.Color.blue()
     )
-
-    embed.set_thumbnail(
-        url=member.display_avatar.url
-    )
-
-    embed.add_field(
-        name="🎯 Level",
-        value=f"**{current_level}**",
-        inline=True
-    )
-
-    embed.add_field(
-        name="⭐ XP",
-        value=f"**{xp} / {xp_needed}**",
-        inline=True
-    )
-
-    embed.add_field(
-        name="📈 Progress",
-        value=f"**{progress}%**",
-        inline=True
-    )
-
+    
+    description = ""
+    for role_name, level in sorted(level_rewards.items(), key=lambda x: x[1]):
+        role = discord.utils.get(ctx.guild.roles, name=role_name)
+        if role:
+            description += f"{role.mention} → Level **{level}**\n"
+        else:
+            description += f"**{role_name}** → Level **{level}** (⚠️ Not found)\n"
+    
+    embed.description = description
+    embed.set_footer(text="Use !set_role @role level to add")
     await ctx.send(embed=embed)
 
+# ==========================
+# 🎯 أمر !level (يعمل)
+# ==========================
+
+@bot.command()
+async def level(ctx, member: discord.Member = None):
+    """يعرض مستوى العضو"""
+    if member is None:
+        member = ctx.author
+    
+    user = get_user(member.id)
+    level = user["level"]
+    xp = user["xp"]
+    xp_needed = (level + 1) * 100
+    
+    embed = discord.Embed(
+        title=f"📊 Level - {member.display_name}",
+        color=discord.Color.blue()
+    )
+    embed.set_thumbnail(url=member.display_avatar.url)
+    embed.add_field(name="🎯 Level", value=f"**{level}**", inline=True)
+    embed.add_field(name="⭐ XP", value=f"**{xp}** / {xp_needed}", inline=True)
+    embed.add_field(name="📊 Progress", value=f"{int((xp / xp_needed) * 100)}%", inline=True)
+    embed.set_footer(text="Keep chatting and staying in voice!")
+    
+    await ctx.send(embed=embed)
 
 # ==========================
-# 🏆 LEADERBOARD
+# 🎯 أمر !leaderboard_level (يعمل)
 # ==========================
 
 @bot.command()
 async def leaderboard_level(ctx):
-
+    """يعرض ترتيب المستويات"""
     if not user_data:
-
-        return await ctx.send(
-            "📊 No level data yet!"
-        )
-
+        return await ctx.send("📊 No data yet!")
+    
     sorted_users = sorted(
         user_data.items(),
-        key=lambda x: (
-            x[1]["level"],
-            x[1]["xp"]
-        ),
+        key=lambda x: (x[1]["level"], x[1]["xp"]),
         reverse=True
     )[:10]
-
-    description = ""
-
-    medals = [
-        "🥇",
-        "🥈",
-        "🥉"
-    ]
-
-    for index, (user_id, data) in enumerate(
-        sorted_users,
-        start=1
-    ):
-
-        member = ctx.guild.get_member(
-            int(user_id)
-        )
-
-        if member:
-            name = member.mention
-        else:
-            name = f"<@{user_id}>"
-
-        medal = (
-            medals[index - 1]
-            if index <= 3
-            else f"**#{index}**"
-        )
-
-        description += (
-            f"{medal} {name} — "
-            f"Level **{data['level']}** "
-            f"({data['xp']} XP)\n"
-        )
-
+    
     embed = discord.Embed(
         title="🏆 Level Leaderboard",
-        description=description,
+        description="Top 10 Members",
         color=discord.Color.gold()
     )
-
+    
+    description = ""
+    for i, (user_id, data) in enumerate(sorted_users, 1):
+        try:
+            user = await bot.fetch_user(int(user_id))
+            name = user.display_name
+        except:
+            name = "Unknown User"
+        
+        level = data["level"]
+        xp = data["xp"]
+        
+        if i == 1:
+            medal = "🥇"
+        elif i == 2:
+            medal = "🥈"
+        elif i == 3:
+            medal = "🥉"
+        else:
+            medal = f"#{i}"
+        
+        description += f"{medal} **{name}** → Level **{level}** (XP: {xp})\n"
+    
+    embed.description = description
+    embed.set_footer(text=f"Requested by: {ctx.author.display_name}")
+    
     await ctx.send(embed=embed)
 
+# ==========================
+# 🎯 أمر !reset_levels (للـ Owner)
+# ==========================
+
+@bot.command()
+@commands.is_owner()
+async def reset_levels(ctx, member: discord.Member = None):
+    """يعيد ضبط مستويات عضو أو الكل"""
+    if member:
+        if str(member.id) in user_data:
+            user_data[str(member.id)] = {"xp": 0, "level": 0}
+            save_levels()
+            await ctx.send(f"✅All levels have been reset {member.mention}")
+        else:
+            await ctx.send(f"❌ {member.mention} He has no data")
+    else:
+        user_data.clear()
+        save_levels()
+        await ctx.send("✅All levels have been reset")
 
 # ==========================
-# 🚀 BOT READY
+# 🚀 تحديث on_ready
 # ==========================
 
 @bot.event
 async def on_ready():
+    # ... الكود الموجود ...
+    load_levels()  # تحميل البيانات
+    update_voice_xp_level.start()  # بدء تحديث الصوت
+    print("🎵 Voice XP tracker started!")
+# ==========================
+# 🎯 أمر !lvl_up مع أزرار (نسخة متطورة)
+# ==========================
 
-    load_levels()
+from discord.ui import Button, View
 
-    if not update_voice_xp.is_running():
-        update_voice_xp.start()
+class LevelView(View):
+    def __init__(self, ctx, user_data):
+        super().__init__(timeout=60)
+        self.ctx = ctx
+        self.user_data = user_data
+    
+    @discord.ui.button(label="📊 My Progress", style=discord.ButtonStyle.primary)
+    async def progress_button(self, interaction: discord.Interaction, button: Button):
+        user = get_user(interaction.user.id)
+        xp_needed = (user["level"] + 1) * 100
+        
+        embed = discord.Embed(
+            title=f"📊 {interaction.user.display_name}'s Progress",
+            color=discord.Color.blue()
+        )
+        embed.add_field(
+            name="Level",
+            value=f"**{user['level']}**",
+            inline=True
+        )
+        embed.add_field(
+            name="XP",
+            value=f"**{user['xp']}** / {xp_needed}",
+            inline=True
+        )
+        embed.add_field(
+            name="Progress",
+            value=f"**{int((user['xp'] / xp_needed) * 100)}%**",
+            inline=True
+        )
+        embed.set_thumbnail(url=interaction.user.display_avatar.url)
+        
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+    
+    @discord.ui.button(label="🎖️ Ranks", style=discord.ButtonStyle.success)
+    async def ranks_button(self, interaction: discord.Interaction, button: Button):
+        if not level_rewards:
+            return await interaction.response.send_message(
+                "❌ No ranks have been set up yet!",
+                ephemeral=True
+            )
+        
+        embed = discord.Embed(
+            title="🎖️ Available Ranks",
+            color=discord.Color.gold()
+        )
+        
+        user = get_user(interaction.user.id)
+        current_level = user["level"]
+        
+        roles_text = ""
+        for role_name, req_level in sorted(level_rewards.items(), key=lambda x: x[1]):
+            role = discord.utils.get(interaction.guild.roles, name=role_name)
+            role_mention = role.mention if role else f"**{role_name}**"
+            
+            if current_level >= req_level:
+                status = "✅ Unlocked"
+            else:
+                status = f"🔒 Level {req_level} required"
+            
+            roles_text += f"{role_mention} → `Level {req_level}` ({status})\n"
+        
+        embed.description = roles_text
+        embed.set_footer(text=f"Your level: {current_level}")
+        
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+    
+    @discord.ui.button(label="❓ How to Earn XP", style=discord.ButtonStyle.secondary)
+    async def howto_button(self, interaction: discord.Interaction, button: Button):
+        embed = discord.Embed(
+            title="⭐ How to Earn XP",
+            description="Here's how you can earn XP in the server:",
+            color=discord.Color.blue()
+        )
+        embed.add_field(
+            name="💬 Chatting",
+            value="Send messages in any text channel\n→ `1-3 XP` per message",
+            inline=False
+        )
+        embed.add_field(
+            name="🔊 Voice",
+            value="Stay in voice channels\n→ `5 XP` every 5 minutes",
+            inline=False
+        )
+        embed.add_field(
+            name="🚫 No XP",
+            value="• AFK channel\n• Bots\n• Voice channels while muted/deafened",
+            inline=False
+        )
+        
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    print(
-        f"✅ Logged in as {bot.user}"
+@bot.command()
+async def lvl_up(ctx):
+    """يشرح نظام المستويات مع أزرار تفاعلية"""
+    
+    user = get_user(ctx.author.id)
+    current_level = user["level"]
+    current_xp = user["xp"]
+    xp_needed = (current_level + 1) * 100
+    
+    embed = discord.Embed(
+        title="📊 Level System",
+        description=f"Welcome to the level system **{ctx.author.display_name}**!",
+        color=discord.Color.blue()
     )
-
-    print("⭐ Level System Started!")
-
+    embed.set_thumbnail(url=ctx.author.display_avatar.url)
+    
+    # شريط التقدم (Progress Bar)
+    progress = int((current_xp / xp_needed) * 20)
+    bar = "🟩" * progress + "⬛" * (20 - progress)
+    
+    embed.add_field(
+        name="📊 Your Progress",
+        value=(
+            f"**Level:** `{current_level}`\n"
+            f"**XP:** `{current_xp}` / `{xp_needed}`\n"
+            f"**Progress:** `{int((current_xp / xp_needed) * 100)}%`\n"
+            f"{bar}"
+        ),
+        inline=False
+    )
+    
+    # عدد الرتب المتاحة
+    if level_rewards:
+        unlocked = 0
+        for role_name, req_level in level_rewards.items():
+            if current_level >= req_level:
+                unlocked += 1
+        embed.add_field(
+            name="🎖️ Ranks",
+            value=f"**{unlocked}** / **{len(level_rewards)}** unlocked",
+            inline=True
+        )
+    else:
+        embed.add_field(
+            name="🎖️ Ranks",
+            value="No ranks set up",
+            inline=True
+        )
+    
+    embed.add_field(
+        name="📌 Commands",
+        value="`!level @member` • `!leaderboard_level` • `!level_up`",
+        inline=True
+    )
+    
+    embed.set_footer(text="Click the buttons below for more info!")
+    
+    view = LevelView(ctx, user)
+    await ctx.send(embed=embed, view=view)
 # ==========================
 # RUN BOT
 # ==========================
