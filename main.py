@@ -1398,6 +1398,76 @@ async def on_ready():
     # ... الكود الموجود ...
     update_voice_xp.start()  # بدء تحديث النقاط الصوتية
 # ==========================
+# 🔧 إصلاح أوامر المستويات
+# ==========================
+
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def set_role(ctx, role: discord.Role, level: int):
+    """يحدد رتبة لمستوى معين"""
+    try:
+        if level < 1:
+            return await ctx.send("❌ المستوى يجب أن يكون أكبر من 0!")
+        
+        level_roles[role.name] = level
+        save_data()
+        
+        embed = discord.Embed(
+            title="✅ Role Set!",
+            description=f"**{role.mention}** → Level **{level}**",
+            color=discord.Color.green()
+        )
+        await ctx.send(embed=embed)
+    except Exception as e:
+        await ctx.send(f"❌ خطأ: {str(e)}")
+
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def remove_role(ctx, role: discord.Role):
+    """يحذف رتبة من نظام المستويات"""
+    try:
+        if role.name not in level_roles:
+            return await ctx.send(f"❌ {role.mention} غير موجودة!")
+        
+        del level_roles[role.name]
+        save_data()
+        
+        embed = discord.Embed(
+            title="✅ Role Removed!",
+            description=f"**{role.mention}** has been removed",
+            color=discord.Color.red()
+        )
+        await ctx.send(embed=embed)
+    except Exception as e:
+        await ctx.send(f"❌ خطأ: {str(e)}")
+
+@bot.command()
+async def level_roles(ctx):
+    """يعرض كل الرتب والمستويات"""
+    try:
+        if not level_roles:
+            return await ctx.send("📊 No roles set yet! Use `!set_role @role level`")
+        
+        embed = discord.Embed(
+            title="🎖️ Level Roles",
+            color=discord.Color.blue()
+        )
+        
+        description = ""
+        for role_name, level in sorted(level_roles.items(), key=lambda x: x[1]):
+            role = discord.utils.get(ctx.guild.roles, name=role_name)
+            if role:
+                description += f"{role.mention} → Level **{level}**\n"
+            else:
+                description += f"**{role_name}** → Level **{level}** (⚠️ Not found)\n"
+        
+        embed.description = description
+        embed.set_footer(text="Use !set_role @role level to add")
+        
+        await ctx.send(embed=embed)
+    except Exception as e:
+        await ctx.send(f"❌ خطأ: {str(e)}")
+# ==========================
 # RUN BOT
 # ==========================
 TOKEN = os.getenv('DISCORD_TOKEN')
