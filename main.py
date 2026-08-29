@@ -1443,6 +1443,163 @@ async def on_ready():
     update_voice_xp_level.start()  # بدء تحديث الصوت
     print("🎵 Voice XP tracker started!")
 # ==========================
+# 🎯 أمر !lvl_up مع أزرار (نسخة متطورة)
+# ==========================
+
+from discord.ui import Button, View
+
+class LevelView(View):
+    def __init__(self, ctx, user_data):
+        super().__init__(timeout=60)
+        self.ctx = ctx
+        self.user_data = user_data
+    
+    @discord.ui.button(label="📊 My Progress", style=discord.ButtonStyle.primary)
+    async def progress_button(self, interaction: discord.Interaction, button: Button):
+        user = get_user(interaction.user.id)
+        xp_needed = (user["level"] + 1) * 100
+        
+        embed = discord.Embed(
+            title=f"📊 {interaction.user.display_name}'s Progress",
+            color=discord.Color.blue()
+        )
+        embed.add_field(
+            name="Level",
+            value=f"**{user['level']}**",
+            inline=True
+        )
+        embed.add_field(
+            name="XP",
+            value=f"**{user['xp']}** / {xp_needed}",
+            inline=True
+        )
+        embed.add_field(
+            name="Progress",
+            value=f"**{int((user['xp'] / xp_needed) * 100)}%**",
+            inline=True
+        )
+        embed.set_thumbnail(url=interaction.user.display_avatar.url)
+        
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+    
+    @discord.ui.button(label="🎖️ Ranks", style=discord.ButtonStyle.success)
+    async def ranks_button(self, interaction: discord.Interaction, button: Button):
+        if not level_rewards:
+            return await interaction.response.send_message(
+                "❌ No ranks have been set up yet!",
+                ephemeral=True
+            )
+        
+        embed = discord.Embed(
+            title="🎖️ Available Ranks",
+            color=discord.Color.gold()
+        )
+        
+        user = get_user(interaction.user.id)
+        current_level = user["level"]
+        
+        roles_text = ""
+        for role_name, req_level in sorted(level_rewards.items(), key=lambda x: x[1]):
+            role = discord.utils.get(interaction.guild.roles, name=role_name)
+            role_mention = role.mention if role else f"**{role_name}**"
+            
+            if current_level >= req_level:
+                status = "✅ Unlocked"
+            else:
+                status = f"🔒 Level {req_level} required"
+            
+            roles_text += f"{role_mention} → `Level {req_level}` ({status})\n"
+        
+        embed.description = roles_text
+        embed.set_footer(text=f"Your level: {current_level}")
+        
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+    
+    @discord.ui.button(label="❓ How to Earn XP", style=discord.ButtonStyle.secondary)
+    async def howto_button(self, interaction: discord.Interaction, button: Button):
+        embed = discord.Embed(
+            title="⭐ How to Earn XP",
+            description="Here's how you can earn XP in the server:",
+            color=discord.Color.blue()
+        )
+        embed.add_field(
+            name="💬 Chatting",
+            value="Send messages in any text channel\n→ `1-3 XP` per message",
+            inline=False
+        )
+        embed.add_field(
+            name="🔊 Voice",
+            value="Stay in voice channels\n→ `5 XP` every 5 minutes",
+            inline=False
+        )
+        embed.add_field(
+            name="🚫 No XP",
+            value="• AFK channel\n• Bots\n• Voice channels while muted/deafened",
+            inline=False
+        )
+        
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+@bot.command()
+async def lvl_up(ctx):
+    """يشرح نظام المستويات مع أزرار تفاعلية"""
+    
+    user = get_user(ctx.author.id)
+    current_level = user["level"]
+    current_xp = user["xp"]
+    xp_needed = (current_level + 1) * 100
+    
+    embed = discord.Embed(
+        title="📊 Level System",
+        description=f"Welcome to the level system **{ctx.author.display_name}**!",
+        color=discord.Color.blue()
+    )
+    embed.set_thumbnail(url=ctx.author.display_avatar.url)
+    
+    # شريط التقدم (Progress Bar)
+    progress = int((current_xp / xp_needed) * 20)
+    bar = "🟩" * progress + "⬛" * (20 - progress)
+    
+    embed.add_field(
+        name="📊 Your Progress",
+        value=(
+            f"**Level:** `{current_level}`\n"
+            f"**XP:** `{current_xp}` / `{xp_needed}`\n"
+            f"**Progress:** `{int((current_xp / xp_needed) * 100)}%`\n"
+            f"{bar}"
+        ),
+        inline=False
+    )
+    
+    # عدد الرتب المتاحة
+    if level_rewards:
+        unlocked = 0
+        for role_name, req_level in level_rewards.items():
+            if current_level >= req_level:
+                unlocked += 1
+        embed.add_field(
+            name="🎖️ Ranks",
+            value=f"**{unlocked}** / **{len(level_rewards)}** unlocked",
+            inline=True
+        )
+    else:
+        embed.add_field(
+            name="🎖️ Ranks",
+            value="No ranks set up",
+            inline=True
+        )
+    
+    embed.add_field(
+        name="📌 Commands",
+        value="`!level @member` • `!leaderboard_level` • `!level_up`",
+        inline=True
+    )
+    
+    embed.set_footer(text="Click the buttons below for more info!")
+    
+    view = LevelView(ctx, user)
+    await ctx.send(embed=embed, view=view)
+# ==========================
 # RUN BOT
 # ==========================
 TOKEN = os.getenv('DISCORD_TOKEN')
