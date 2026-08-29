@@ -4,12 +4,13 @@ import os
 os.system("pip install pynacl")
 import sys
 import discord
-from datetime import timedelta
-from discord.ext import commands
+from datetime import datetime, timedelta
+from discord.ext import commands, tasks
 from flask import Flask
 from threading import Thread
 import json
 from typing import Optional
+import random
 
 # ==========================
 # FLASK KEEP-ALIVE
@@ -65,6 +66,118 @@ INVITE_REGEX = re.compile(
 )
 
 # ==========================
+# 📊 نظام المستويات (Level System)
+# ==========================
+
+LEVEL_FILE = "level_data.json"
+
+# متغيرات عامة
+user_data = {}  # {user_id: {"xp": 0, "level": 0}}
+level_rewards = {}  # {role_name: level}
+voice_time = {}  # {user_id: start_time}
+
+# ==========================
+# 💾 حفظ وتحميل البيانات
+# ==========================
+
+def load_levels():
+    """تحميل بيانات المستويات من الملف"""
+    global user_data, level_rewards
+    try:
+        with open(LEVEL_FILE, "r") as f:
+            data = json.load(f)
+            user_data = data.get("user_data", {})
+            level_rewards = data.get("level_rewards", {})
+        print("✅ تم تحميل بيانات المستويات!")
+    except FileNotFoundError:
+        user_data = {}
+        level_rewards = {}
+        print("📝 تم إنشاء ملف بيانات جديد!")
+    except:
+        user_data = {}
+        level_rewards = {}
+        print("⚠️ خطأ في تحميل البيانات، تم إنشاء بيانات جديدة!")
+
+def save_levels():
+    """حفظ بيانات المستويات في الملف"""
+    data = {
+        "user_data": user_data,
+        "level_rewards": level_rewards
+    }
+    try:
+        with open(LEVEL_FILE, "w") as f:
+            json.dump(data, f, indent=4)
+        print("💾 تم حفظ بيانات المستويات!")
+    except Exception as e:
+        print(f"❌ خطأ في حفظ البيانات: {e}")
+
+# تحميل البيانات عند التشغيل
+load_levels()
+
+# ==========================
+# 📊 دوال XP
+# ==========================
+
+def get_user(user_id):
+    """يجيب بيانات مستخدم"""
+    user_id = str(user_id)
+    if user_id not in user_data:
+        user_data[user_id] = {"xp": 0, "level": 0}
+        save_levels()
+    return user_data[user_id]
+
+def add_xp(user_id, amount):
+    """يزيد نقاط المستخدم ويرجع True إذا ترقى"""
+    user = get_user(user_id)
+    user["xp"] += amount
+    
+    xp_needed = (user["level"] + 1) * 100
+    
+    if user["xp"] >= xp_needed:
+        user["xp"] = 0
+        user["level"] += 1
+        save_levels()
+        return True
+    save_levels()
+    return False
+
+# ==========================
+# 🎖️ إعطاء الرتب
+# ==========================
+
+async def check_rank(member):
+    """يعطي رتبة للعضو حسب مستواه"""
+    user = get_user(member.id)
+    level = user["level"]
+    
+    role_to_give = None
+    for role_name, req_level in level_rewards.items():
+        if level >= req_level:
+            role_to_give = role_name
+    
+    if role_to_give is None:
+        return
+    
+    role = discord.utils.get(member.guild.roles, name=role_to_give)
+    if role is None:
+        try:
+            role = await member.guild.create_role(
+                name=role_to_give,
+                color=discord.Color.gold(),
+                reason=f"Level {level} reached"
+            )
+            print(f"✅ تم إنشاء رتبة: {role_to_give}")
+        except:
+            return
+    
+    if role not in member.roles:
+        try:
+            await member.add_roles(role, reason=f"Reached Level {level}")
+            print(f"🎖️ {member.display_name} got {role_to_give}")
+        except:
+            pass
+
+# ==========================
 # READY
 # ==========================
 @bot.event
@@ -73,6 +186,10 @@ async def on_ready():
     print(f"✅ Bot is ready!")
     print(f"✅ Connected to {len(bot.guilds)} guilds")
     print(f"👑 Owner ID: {bot.owner_id}")
+    
+    load_levels()  # تحميل البيانات
+    update_voice_xp_level.start()  # بدء تحديث الصوت
+    print("🎵 Voice XP tracker started!")
     
     # 📊 تحميل بيانات الدعوات
     for guild in bot.guilds:
@@ -178,46 +295,203 @@ async def on_voice_state_update(member, before, after):
     """
     
     # نتجاوز كل الأعضاء ما عدا البوت نفسه
-    if member.id != bot.user.id:
+    if member.id == bot.user.id:
+        guild = member.guild
+        
+        # ===== إذا دخل البوت لروم =====
+        if after.channel:
+            last_voice_channel[guild.id] = after.channel.id
+            print(f"🔊 Bot moved to: {after.channel.name}")
+            return
+        
+        # ===== إذا طلع البوت =====
+        # نتحقق إذا كان طلع يدوياً (أمر !leave)
+        if guild.id in manual_leave:
+            manual_leave.remove(guild.id)
+            print("👋 Bot left manually (via !leave)")
+            return
+        
+        # ===== إذا طلع بالغلط (Disconnect) =====
+        if before.channel and guild.id in last_voice_channel:
+            await asyncio.sleep(3)  # نستنى 3 ثواني
+            
+            try:
+                # نتحقق إذا البوت لسا خارج
+                if guild.voice_client is None:
+                    # نجيب الروم المخزن
+                    channel = guild.get_channel(last_voice_channel[guild.id])
+                    
+                    if channel:
+                        # نرجع البوت للروم
+                        await channel.connect()
+                        print(f"🔄 Bot reconnected to: {channel.name}")
+                        
+                        # نرسل رسالة في الـ logs
+                        log_channel = discord.utils.get(guild.text_channels, name="logs")
+                        if log_channel:
+                            await log_channel.send("🔄 **Bot reconnected automatically!**")
+                            
+            except Exception as e:
+                print(f"❌ Reconnect error: {e}")
+    
+    # 🛏️ نظام AFK (Self-Deaf) - للأعضاء العاديين
+    if member.bot:
         return
     
-    guild = member.guild
+    # ===== كشف Self-Deaf =====
+    if after.self_deaf and not before.self_deaf:
+        # العضو عمل Self-Deaf
+        afk_tracker[member.id] = {
+            "start_time": discord.utils.utcnow(),
+            "message_sent": False,
+            "channel_id": after.channel.id if after.channel else None
+        }
+        print(f"🔇 {member.display_name} عمل Self-Deaf")
+        
+        # نبدا المهمة لمراقبة الوقت
+        asyncio.create_task(afk_monitor(member))
     
-    # ===== إذا دخل البوت لروم =====
-    if after.channel:
-        last_voice_channel[guild.id] = after.channel.id
-        print(f"🔊 Bot moved to: {after.channel.name}")
+    # ===== كشف إلغاء Self-Deaf =====
+    elif not after.self_deaf and before.self_deaf:
+        # العضو ألغى الـ Self-Deaf
+        if member.id in afk_tracker:
+            del afk_tracker[member.id]
+            print(f"🔊 {member.display_name} cancel Self-Deaf")
+    
+    # 🎵 XP من الصوت - نظام المستويات
+    afk = discord.utils.get(member.guild.voice_channels, name="├😴・𝙰𝚏𝚔")
+    
+    # إذا دخل روم AFK
+    if after.channel == afk:
+        if str(member.id) in voice_time:
+            del voice_time[str(member.id)]
         return
     
-    # ===== إذا طلع البوت =====
-    # نتحقق إذا كان طلع يدوياً (أمر !leave)
-    if guild.id in manual_leave:
-        manual_leave.remove(guild.id)
-        print("👋 Bot left manually (via !leave)")
+    # إذا دخل روم صوتي
+    if after.channel and before.channel is None:
+        voice_time[str(member.id)] = datetime.utcnow()
+    
+    # إذا خرج من روم صوتي
+    elif before.channel and after.channel is None:
+        if str(member.id) in voice_time:
+            start = voice_time[str(member.id)]
+            diff = (datetime.utcnow() - start).total_seconds()
+            xp = int(diff // 60)
+            
+            if xp > 0:
+                leveled = add_xp(member.id, xp)
+                if leveled:
+                    await check_rank(member)
+                    
+                    channel = discord.utils.get(member.guild.text_channels, name="└📊・𝐋𝐞𝐯𝐞𝐥-𝐔𝐏")
+                    if channel is None:
+                        overwrites = {
+                            member.guild.default_role: discord.PermissionOverwrite(send_messages=True, read_messages=True),
+                            member.guild.me: discord.PermissionOverwrite(send_messages=True, read_messages=True)
+                        }
+                        channel = await member.guild.create_text_channel(
+                            name="└📊・𝐋𝐞𝐯𝐞𝐥-𝐔𝐏",
+                            overwrites=overwrites,
+                            reason="تم إنشاء روم الترقيات"
+                        )
+                    
+                    user = get_user(member.id)
+                    embed = discord.Embed(
+                        title="🎉 Level Up!",
+                        description=f"{member.mention} reached **Level {user['level']}** from voice!",
+                        color=discord.Color.gold()
+                    )
+                    await channel.send(embed=embed)
+            
+            del voice_time[str(member.id)]
+
+# 🛏️ متغيرات AFK
+afk_tracker = {}  # {user_id: {"start_time": timestamp, "message_sent": False, "channel_id": channel_id}}
+
+async def afk_monitor(member):
+    """تراقب العضو اللي عمل Self-Deaf"""
+    
+    # نستنى 5 دقائق باش نبعث الرسالة
+    await asyncio.sleep(300)  # 5 دقائق = 300 ثانية
+    
+    # نتحقق إذا كان العضو لسا في الـ AFK
+    if member.id not in afk_tracker:
         return
     
-    # ===== إذا طلع بالغلط (Disconnect) =====
-    if before.channel and guild.id in last_voice_channel:
-        await asyncio.sleep(3)  # نستنى 3 ثواني
+    # نتحقق إذا كان لسا Self-Deaf
+    if not member.voice or not member.voice.self_deaf:
+        if member.id in afk_tracker:
+            del afk_tracker[member.id]
+        return
+    
+    # نبعث الرسالة (مرة وحدة)
+    if not afk_tracker[member.id]["message_sent"]:
+        afk_tracker[member.id]["message_sent"] = True
         
         try:
-            # نتحقق إذا البوت لسا خارج
-            if guild.voice_client is None:
-                # نجيب الروم المخزن
-                channel = guild.get_channel(last_voice_channel[guild.id])
-                
-                if channel:
-                    # نرجع البوت للروم
-                    await channel.connect()
-                    print(f"🔄 Bot reconnected to: {channel.name}")
-                    
-                    # نرسل رسالة في الـ logs
-                    log_channel = discord.utils.get(guild.text_channels, name="logs")
-                    if log_channel:
-                        await log_channel.send("🔄 **Bot reconnected automatically!**")
-                        
-        except Exception as e:
-            print(f"❌ Reconnect error: {e}")
+            # نبعث رسالة خاصة
+            embed = discord.Embed(
+                title="🔇 alert to AFK",
+                description="You are currently **deafened** in **𝙳𝚎𝚊𝚝𝚑 𝚆𝚑𝚒𝚜𝚙𝚎𝚛 𝙲𝚘𝚖𝚖𝚞𝚗𝚒𝚝𝚢**.",
+                color=discord.Color.red()
+            )
+            embed.add_field(
+                name="⏰ alert",
+                value="You will be moved to **AFK** after **1 hour** of being deaf.",
+                inline=False
+            )
+            embed.set_footer(text="🔊 Unmute yourself to cancel AFK")
+            
+            await member.send(embed=embed)
+            print(f"📩AFK message sent to{member.display_name}")
+            
+        except:
+            print(f"❌ i cant send message to {member.display_name} (DM locked)")
+    
+    # نستنى ساعة كاملة (3600 ثانية) باش نحرك
+    await asyncio.sleep(3600)  # ساعة = 3600 ثانية
+    
+    # نتحقق مرة أخرى
+    if member.id not in afk_tracker:
+        return
+    
+    if not member.voice or not member.voice.self_deaf:
+        if member.id in afk_tracker:
+            del afk_tracker[member.id]
+        return
+    
+    # ===== نحرك العضو لروم AFK =====
+    try:
+        # نجيب الروم AFK
+        afk_channel = discord.utils.get(member.guild.voice_channels, name="├😴・𝙰𝚏𝚔")
+        
+        if afk_channel is None:
+            print("❌ روم AFK مش موجود!")
+            # نعمل روم إذا مش موجود
+            afk_channel = await member.guild.create_voice_channel(
+                name="├😴・𝙰𝚏𝚔",
+                reason="تم إنشاء روم AFK تلقائياً"
+            )
+            print("✅ تم إنشاء روم AFK")
+        
+        # نحرك العضو
+        await member.move_to(afk_channel, reason="Self-Deaf For one hour ")
+        print(f"🚀{member.display_name} has been moved to afk ")
+        
+        # نرسل رسالة في الشات
+        channel = discord.utils.get(member.guild.text_channels, name="logs")
+        if channel is None:
+            channel = member.guild.system_channel
+        
+        if channel:
+            await channel.send(f"🔇 {member.mention} He was transferred to **AFK** one hour after the Self-Deaf.")
+        
+        # نحذف من التراكر
+        if member.id in afk_tracker:
+            del afk_tracker[member.id]
+            
+    except Exception as e:
+        print(f"❌ Organ transfer error: {e}")
 
 # ==========================
 # WARNINGS
@@ -367,1119 +641,4 @@ async def warnings(ctx, member: discord.Member):
 async def clear_all(ctx, amount: int):
     """يحذف عدد محدد من الرسائل (نسخة احتياطية)"""
     if amount < 1:
-        return await ctx.send("❌ Please specify a number greater than 0.")
-    if amount > 100:
-        return await ctx.send("❌ Cannot delete more than 100 messages at once.")
-    
-    deleted = await ctx.channel.purge(limit=amount)
-    await ctx.send(f"✅ Deleted {len(deleted)} messages.", delete_after=3)
-
-# ==========================
-# ⭐⭐⭐ أوامر DM ⭐⭐⭐
-# ==========================
-
-# 6️⃣ أمر !dm
-@bot.command()
-@commands.is_owner()
-async def dm(ctx, member: discord.Member, *, message: str):
-    """يبعث رسالة خاصة لعضو واحد"""
-    try:
-        embed = discord.Embed(
-            title="📩 Message from 𝙳𝚎𝚊𝚝𝚑 𝚆𝚑𝚒𝚜𝚙𝚎𝚛 𝙲𝚘𝚖𝚖𝚞𝚗𝚒𝚝𝚢",
-            description=message,
-            color=discord.Color.blue()
-        )
-        embed.set_footer(text=f"from: {ctx.author.display_name} • {ctx.guild.name}")
-        embed.set_thumbnail(url=ctx.guild.icon.url if ctx.guild.icon else None)
-        
-        await member.send(embed=embed)
-        await ctx.send(f"✅ The message was sent successfully! **{member.display_name}** ")
-    except discord.Forbidden:
-        await ctx.send(f"❌ I can't send a message to**{member.display_name}** (DM locked )")
-    except Exception as e:
-        await ctx.send(f"❌error : {str(e)}")
-
-# 7️⃣ أمر !dmrole
-@bot.command()
-@commands.is_owner()
-async def dmrole(ctx, role: discord.Role, *, message: str):
-    """يبعث رسالة خاصة لجميع أعضاء دور معين"""
-    confirm_msg = await ctx.send(f"⚠️ **You are about to send a DM to {len(role.members)} member ** In a role {role.mention}\nmessage : \"{message}\"\n\nReply with **yes** Confirmation or **no** to cancel  (30 S )")
-    
-    def check(m):
-        return m.author == ctx.author and m.channel == ctx.channel and m.content.lower() in ['yes', 'no']
-    
-    try:
-        response = await bot.wait_for('message', timeout=30.0, check=check)
-        
-        if response.content.lower() == 'no':
-            return await ctx.send("❌Cancelled.")
-        
-        await ctx.send(f"⏳Messages are being sent to {len(role.members)} member ...")
-        
-        success_count = 0
-        fail_count = 0
-        
-        embed = discord.Embed(
-            title="📢  Message from 𝙳𝚎𝚊𝚝𝚑 𝚆𝚑𝚒𝚜𝚙𝚎𝚛 𝙲𝚘𝚖𝚖𝚞𝚗𝚒𝚝𝚢",
-            description=message,
-            color=discord.Color.green()
-        )
-        embed.set_footer(text=f"from: {ctx.author.display_name} • {ctx.guild.name}")
-        embed.set_thumbnail(url=ctx.guild.icon.url if ctx.guild.icon else None)
-        
-        for member in role.members:
-            if member.bot:
-                continue
-            try:
-                await member.send(embed=embed)
-                success_count += 1
-                await asyncio.sleep(0.3)
-            except:
-                fail_count += 1
-        
-        await ctx.send(f"✅ **Sent successfully!**\n✅succeeded: {success_count}\n❌ fail: {fail_count}")
-        
-    except asyncio.TimeoutError:
-        await ctx.send("⏰Time's up! Cancelled.")
-
-# 8️⃣ أمر !dmall
-@bot.command()
-@commands.is_owner()
-async def dmall(ctx, *, message: str):
-    """يبعث رسالة خاصة لجميع الأعضاء (باستثناء البوتات)"""
-    members = [m for m in ctx.guild.members if not m.bot]
-    
-    confirm_msg = await ctx.send(f"⚠️ **You are about to send a DM to {len(members)} member **\nmessage: \"{message}\"\n\nReply with **yes** To confirm or **no** Cancel (30 S)")
-    
-    def check(m):
-        return m.author == ctx.author and m.channel == ctx.channel and m.content.lower() in ['yes', 'no']
-    
-    try:
-        response = await bot.wait_for('message', timeout=30.0, check=check)
-        
-        if response.content.lower() == 'no':
-            return await ctx.send("❌ Cancelled.")
-        
-        await ctx.send(f"⏳ Messages are being sent to {len(members)} member ...")
-        
-        success_count = 0
-        fail_count = 0
-        
-        embed = discord.Embed(
-            title="📢  Message from 𝙳𝚎𝚊𝚝𝚑 𝚆𝚑𝚒𝚜𝚙𝚎𝚛 𝙲𝚘𝚖𝚖𝚞𝚗𝚒𝚝𝚢",
-            description=message,
-            color=discord.Color.green()
-        )
-        embed.set_footer(text=f"from: {ctx.author.display_name} • {ctx.guild.name}")
-        embed.set_thumbnail(url=ctx.guild.icon.url if ctx.guild.icon else None)
-        
-        for member in members:
-            try:
-                await member.send(embed=embed)
-                success_count += 1
-                await asyncio.sleep(0.3)
-            except:
-                fail_count += 1
-        
-        await ctx.send(f"✅ **Sent successfully!**\n✅  succeeded: {success_count}\n❌fail: {fail_count}")
-        
-    except asyncio.TimeoutError:
-        await ctx.send("⏰ime's up! Cancelled.")
-
-
-# ==========================
-# MESSAGE FILTER
-# ==========================
-@bot.event
-async def on_message(message):
-    if message.author.bot:
-        return
-    if not message.guild:
-        return await bot.process_commands(message)
-    if not message.author.guild_permissions.administrator:
-        content = message.content.lower()
-        if INVITE_REGEX.search(content):
-            await message.delete()
-            await message.author.timeout(
-                timedelta(minutes=1),
-                reason="Discord Invite"
-            )
-            return
-        for word in BAD_WORDS:
-            if word in content:
-                await message.delete()
-                warnings[message.author.id] = warnings.get(
-                    message.author.id, 0
-                ) + 1
-                log = discord.utils.get(
-                    message.guild.text_channels,
-                    name=LOG_CHANNEL_NAME
-                )
-                if log:
-                    await log.send(
-                        f"⚠️ {message.author.mention} used `{word}` "
-                        f"({warnings[message.author.id]}/3)"
-                    )
-                if warnings[message.author.id] >= 3:
-                    await message.author.timeout(
-                        timedelta(minutes=10),
-                        reason="3 Bad Words"
-                    )
-                    warnings[message.author.id] = 0
-                return
-    await bot.process_commands(message)
-
-# ==========================
-# 🛏️ نظام AFK (Self-Deaf)
-# ==========================
-
-# متغيرات لتتبع الـ AFK
-afk_tracker = {}  # {user_id: {"start_time": timestamp, "message_sent": False, "channel_id": channel_id}}
-
-@bot.event
-async def on_voice_state_update(member, before, after):
-    """يكتشف الـ Self-Deaf ويدير نظام AFK"""
-    
-    # نتجاوز البوتات
-    if member.bot:
-        return
-    
-    # ===== كشف Self-Deaf =====
-    if after.self_deaf and not before.self_deaf:
-        # العضو عمل Self-Deaf
-        afk_tracker[member.id] = {
-            "start_time": discord.utils.utcnow(),
-            "message_sent": False,
-            "channel_id": after.channel.id if after.channel else None
-        }
-        print(f"🔇 {member.display_name} عمل Self-Deaf")
-        
-        # نبدا المهمة لمراقبة الوقت
-        asyncio.create_task(afk_monitor(member))
-    
-    # ===== كشف إلغاء Self-Deaf =====
-    elif not after.self_deaf and before.self_deaf:
-        # العضو ألغى الـ Self-Deaf
-        if member.id in afk_tracker:
-            del afk_tracker[member.id]
-            print(f"🔊 {member.display_name} cancel Self-Deaf")
-
-
-async def afk_monitor(member):
-    """تراقب العضو اللي عمل Self-Deaf"""
-    
-    # نستنى 5 دقائق باش نبعث الرسالة
-    await asyncio.sleep(300)  # 5 دقائق = 300 ثانية
-    
-    # نتحقق إذا كان العضو لسا في الـ AFK
-    if member.id not in afk_tracker:
-        return
-    
-    # نتحقق إذا كان لسا Self-Deaf
-    if not member.voice or not member.voice.self_deaf:
-        if member.id in afk_tracker:
-            del afk_tracker[member.id]
-        return
-    
-    # نبعث الرسالة (مرة وحدة)
-    if not afk_tracker[member.id]["message_sent"]:
-        afk_tracker[member.id]["message_sent"] = True
-        
-        try:
-            # نبعث رسالة خاصة
-            embed = discord.Embed(
-                title="🔇 alert to AFK",
-                description="You are currently **deafened** in **𝙳𝚎𝚊𝚝𝚑 𝚆𝚑𝚒𝚜𝚙𝚎𝚛 𝙲𝚘𝚖𝚖𝚞𝚗𝚒𝚝𝚢**.",
-                color=discord.Color.red()
-            )
-            embed.add_field(
-                name="⏰ alert",
-                value="You will be moved to **AFK** after **1 hour** of being deaf.",
-                inline=False
-            )
-            embed.set_footer(text="🔊 Unmute yourself to cancel AFK")
-            
-            await member.send(embed=embed)
-            print(f"📩AFK message sent to{member.display_name}")
-            
-        except:
-            print(f"❌ i cant send message to {member.display_name} (DM locked)")
-    
-    # نستنى ساعة كاملة (3600 ثانية) باش نحرك
-    await asyncio.sleep(3600)  # ساعة = 3600 ثانية
-    
-    # نتحقق مرة أخرى
-    if member.id not in afk_tracker:
-        return
-    
-    if not member.voice or not member.voice.self_deaf:
-        if member.id in afk_tracker:
-            del afk_tracker[member.id]
-        return
-    
-    # ===== نحرك العضو لروم AFK =====
-    try:
-        # نجيب الروم AFK
-        afk_channel = discord.utils.get(member.guild.voice_channels, name="├😴・𝙰𝚏𝚔")
-        
-        if afk_channel is None:
-            print("❌ روم AFK مش موجود!")
-            # نعمل روم إذا مش موجود
-            afk_channel = await member.guild.create_voice_channel(
-                name="├😴・𝙰𝚏𝚔",
-                reason="تم إنشاء روم AFK تلقائياً"
-            )
-            print("✅ تم إنشاء روم AFK")
-        
-        # نحرك العضو
-        await member.move_to(afk_channel, reason="Self-Deaf For one hour ")
-        print(f"🚀{member.display_name} has been moved to afk ")
-        
-        # نرسل رسالة في الشات
-        channel = discord.utils.get(member.guild.text_channels, name="logs")
-        if channel is None:
-            channel = member.guild.system_channel
-        
-        if channel:
-            await channel.send(f"🔇 {member.mention} He was transferred to **AFK** one hour after the Self-Deaf.")
-        
-        # نحذف من التراكر
-        if member.id in afk_tracker:
-            del afk_tracker[member.id]
-            
-    except Exception as e:
-        print(f"❌ Organ transfer error: {e}")
-
-
-# ==========================
-# 📊 LEADERBOARD (للكل) - النسخة المتطورة
-# ==========================
-
-# متغيرات لتتبع الدعوات
-invite_data = {}  # {user_id: invites_count}
-invite_cache = {}  # {guild_id: {invite_code: invite_object}}
-
-@bot.event
-async def on_ready():
-    print(f"✅ Logged in as {bot.user}")
-    print(f"✅ Bot is ready!")
-    print(f"✅ Connected to {len(bot.guilds)} guilds")
-    print(f"👑 Owner ID: {bot.owner_id}")
-    
-    # 📊 تحميل بيانات الدعوات
-    for guild in bot.guilds:
-        try:
-            invites = await guild.invites()
-            # نخزن الدعوات في الكاش
-            invite_cache[guild.id] = {}
-            for invite in invites:
-                invite_cache[guild.id][invite.code] = invite
-                
-                # نخزن عدد الدعوات لكل عضو
-                if invite.inviter:
-                    inviter_id = str(invite.inviter.id)
-                    if inviter_id not in invite_data:
-                        invite_data[inviter_id] = 0
-                    invite_data[inviter_id] += invite.uses
-        except Exception as e:
-            print(f"❌ Error loading invitations: {e}")
-    print("📊 Invite data loaded!")
-
-@bot.event
-async def on_member_join(member):
-    """تحديث الدعوات عند دخول عضو جديد"""
-    
-    guild = member.guild
-    
-    # نتجاوز البوتات
-    if member.bot:
-        return
-    
-    try:
-        # نجيب الدعوات الجديدة
-        new_invites = await guild.invites()
-        
-        # نقارن مع الدعوات القديمة
-        for invite in new_invites:
-            # نبحث عن الدعوة اللي زاد فيها العدد
-            old_invite = invite_cache.get(guild.id, {}).get(invite.code)
-            
-            if old_invite:
-                # إذا زاد عدد الدعوات
-                if invite.uses > old_invite.uses:
-                    inviter = invite.inviter
-                    if inviter and not inviter.bot:
-                        # نزيد عدد الدعوات للداعي
-                        inviter_id = str(inviter.id)
-                        invite_data[inviter_id] = invite_data.get(inviter_id, 0) + 1
-                        print(f"✅ {inviter.display_name} invite {member.display_name}")
-                        
-                        # نبعث رسالة للداعي
-                        try:
-                            await inviter.send(f"🎉 {member.display_name} You entered the server with your invitation! Your current number of invitations: {invite_data[inviter_id]}")
-                        except:
-                            pass
-                        break
-        
-        # نحدث الكاش
-        for invite in new_invites:
-            invite_cache[guild.id][invite.code] = invite
-            
-    except Exception as e:
-        print(f"❌ خطأ في تحديث الدعوات: {e}")
-
-@bot.command()  # للكل
-async def leaderboard(ctx):
-    """يعرض ترتيب الأعضاء حسب عدد الدعوات (للجميع)"""
-    
-    if not invite_data:
-        return await ctx.send("📊 No invites found! Start inviting people!")
-    
-    # نرتب الدعوات من الأكبر للأصغر
-    sorted_invites = sorted(invite_data.items(), key=lambda x: x[1], reverse=True)
-    
-    # ناخذ الـ Top 10
-    top_10 = sorted_invites[:10]
-    
-    embed = discord.Embed(
-        title="🏆 Leaderboard - Invites",
-        description="Top 10 Invited Members",
-        color=discord.Color.gold()
-    )
-    
-    description = ""
-    for i, (user_id, count) in enumerate(top_10, 1):
-        try:
-            user = await bot.fetch_user(int(user_id))
-            name = user.display_name
-        except:
-            name = f"Unknown User"
-        
-        if i == 1:
-            medal = "🥇"
-        elif i == 2:
-            medal = "🥈"
-        elif i == 3:
-            medal = "🥉"
-        else:
-            medal = f"#{i}"
-        
-        description += f"{medal} **{name}** → `{count}` invites\n"
-    
-    embed.description = description
-    embed.set_footer(text=f"Requested by: {ctx.author.display_name}")
-    embed.set_thumbnail(url=ctx.guild.icon.url if ctx.guild.icon else None)
-    
-    await ctx.send(embed=embed)
-
-# ==========================
-# أوامر إضافية للدعوات
-# ==========================
-
-@bot.command()
-async def invites(ctx, member: discord.Member = None):
-    """يعرض عدد دعوات عضو معين"""
-    
-    if member is None:
-        member = ctx.author
-    
-    count = invite_data.get(str(member.id), 0)
-    
-    embed = discord.Embed(
-        title="📊 Invites",
-        description=f"{member.mention} has **{count}** invites!",
-        color=discord.Color.blue()
-    )
-    embed.set_footer(text=f"Requested by: {ctx.author.display_name}")
-    embed.set_thumbnail(url=member.display_avatar.url)
-    
-    await ctx.send(embed=embed)
-
-@bot.command()
-@commands.is_owner()
-async def reset_invites(ctx, member: discord.Member = None):
-    """يعيد ضبط دعوات عضو (للـ Owner فقط)"""
-    
-    if member is None:
-        return await ctx.send("❌ identif the member: `!reset_invites @user`")
-    
-    invite_data[str(member.id)] = 0
-    await ctx.send(f"✅The invitations have been reset {member.mention}")
-
-@bot.command()
-@commands.is_owner()
-async def set_invites(ctx, member: discord.Member, count: int):
-    """يحدد عدد دعوات عضو (للـ Owner فقط)"""
-    
-    if count < 0:
-        return await ctx.send("❌ The number must be positive!")
-    
-    invite_data[str(member.id)] = count
-    await ctx.send(f"✅ The invitations have been {member.mention} to `{count}`")
-
-# ==========================
-# 📦 أمر !embed (النسخة الكاملة)
-# ==========================
-
-@bot.command()
-@commands.is_owner()
-async def embed(ctx, *, message: str):
-    """
-    يبعث رسالة في Embed مع إطار جميل
-    استعمل: !embed نص الرسالة
-    """
-    
-    # نقسم الرسالة إلى عنوان ووصف إذا كانت تحتوي على "|"
-    if "|" in message:
-        parts = message.split("|", 1)
-        title = parts[0].strip()
-        description = parts[1].strip()
-    else:
-        title = None
-        description = message
-    
-    # نعمل Embed
-    embed = discord.Embed(
-        title=title,
-        description=description,
-        color=discord.Color.blue()
-    )
-    
-    # نضيف معلومات إضافية
-    embed.set_footer(
-        text=f"📝 from: {ctx.author.display_name}",
-        icon_url=ctx.author.display_avatar.url
-    )
-    
-    if ctx.guild.icon:
-        embed.set_thumbnail(url=ctx.guild.icon.url)
-    
-    embed.timestamp = discord.utils.utcnow()
-    
-    # نحذف رسالة المستخدم
-    await ctx.message.delete()
-    
-    # نبعث الـ Embed
-    await ctx.send(embed=embed)
-# ==========================
-# 8️⃣ أمر !lock (يقفل الشات)
-# ==========================
-@bot.command()
-@commands.has_permissions(manage_channels=True)
-async def lock(ctx):
-    """يقفل الشات (يمنع الأعضاء من الكتابة)"""
-    
-    channel = ctx.channel
-    
-    # نجيب صلاحيات @everyone
-    overwrite = channel.overwrites_for(ctx.guild.default_role)
-    overwrite.send_messages = False
-    
-    try:
-        await channel.set_permissions(ctx.guild.default_role, overwrite=overwrite)
-        await ctx.send(f"🔒 **{channel.mention} has been locked!**")
-    except:
-        await ctx.send("❌ I don't have permission to lock this channel!")
-
-# ==========================
-# 9️⃣ أمر !unlock (يفتح الشات)
-# ==========================
-@bot.command()
-@commands.has_permissions(manage_channels=True)
-async def unlock(ctx):
-    """يفتح الشات (يسمح للأعضاء بالكتابة)"""
-    
-    channel = ctx.channel
-    
-    # نجيب صلاحيات @everyone
-    overwrite = channel.overwrites_for(ctx.guild.default_role)
-    overwrite.send_messages = None  # نرجعها للوضع الافتراضي
-    
-    try:
-        await channel.set_permissions(ctx.guild.default_role, overwrite=overwrite)
-        await ctx.send(f"🔓 **{channel.mention} has been unlocked!**")
-    except:
-        await ctx.send("❌ I don't have permission to unlock this channel!")
-# ==========================
-# 🚀 أوامر المعلومات (مضافة)
-# ==========================
-
-@bot.command()
-async def serverinfo(ctx):
-    """يعرض معلومات عن السيرفر"""
-    
-    guild = ctx.guild
-    
-    total_members = guild.member_count
-    humans = len([m for m in guild.members if not m.bot])
-    bots = total_members - humans
-    
-    text_channels = len(guild.text_channels)
-    voice_channels = len(guild.voice_channels)
-    categories = len(guild.categories)
-    total_roles = len(guild.roles)
-    
-    embed = discord.Embed(
-        title=f"📊 Server Info - {guild.name}",
-        color=discord.Color.blue()
-    )
-    
-    if guild.icon:
-        embed.set_thumbnail(url=guild.icon.url)
-    
-    embed.add_field(name="👑 Owner", value=guild.owner.mention, inline=True)
-    embed.add_field(name="🆔 ID", value=guild.id, inline=True)
-    embed.add_field(name="📅 Created", value=guild.created_at.strftime("%Y-%m-%d"), inline=True)
-    embed.add_field(name="👥 Members", value=f"{total_members} (👤{humans} 🤖{bots})", inline=True)
-    embed.add_field(name="💬 Channels", value=f"📝{text_channels} 🔊{voice_channels} 📁{categories}", inline=True)
-    embed.add_field(name="🎭 Roles", value=total_roles, inline=True)
-    embed.add_field(name="🔗 Boost Level", value=guild.premium_tier, inline=True)
-    embed.add_field(name="⭐ Boost Count", value=guild.premium_subscription_count, inline=True)
-    
-    if guild.vanity_url:
-        embed.add_field(name="🔗 Vanity URL", value=guild.vanity_url, inline=False)
-    
-    embed.set_footer(text=f"Requested by: {ctx.author.display_name}")
-    
-    await ctx.send(embed=embed)
-
-@bot.command()
-async def userinfo(ctx, member: discord.Member = None):
-    """يعرض معلومات عن عضو"""
-    
-    if member is None:
-        member = ctx.author
-    
-    roles = [r.mention for r in member.roles if r != ctx.guild.default_role]
-    roles_text = ", ".join(roles) if roles else "No roles"
-    
-    embed = discord.Embed(
-        title=f"👤 User Info - {member.display_name}",
-        color=member.color if member.color != discord.Color.default() else discord.Color.blue()
-    )
-    embed.set_thumbnail(url=member.display_avatar.url)
-    
-    embed.add_field(name="🆔 ID", value=member.id, inline=True)
-    embed.add_field(name="📛 Name", value=member.name, inline=True)
-    embed.add_field(name="🎭 Nickname", value=member.nick if member.nick else "None", inline=True)
-    embed.add_field(name="📅 Joined", value=member.joined_at.strftime("%Y-%m-%d %H:%M"), inline=True)
-    embed.add_field(name="📅 Created", value=member.created_at.strftime("%Y-%m-%d %H:%M"), inline=True)
-    embed.add_field(name="🎭 Roles", value=roles_text, inline=False)
-    embed.add_field(name="🤖 Bot", value="Yes" if member.bot else "No", inline=True)
-    embed.add_field(name="🔊 In Voice", value="Yes" if member.voice else "No", inline=True)
-    
-    embed.set_footer(text=f"Requested by: {ctx.author.display_name}")
-    
-    await ctx.send(embed=embed)
-
-@bot.command()
-async def ping(ctx):
-    """يعرض سرعة استجابة البوت"""
-    latency = round(bot.latency * 1000)
-    await ctx.send(f"🏓 Pong! `{latency}ms`")
-# ==========================
-# 📊 نظام Level Up (المستويات) - النسخة النهائية
-# ==========================
-
-from discord.ext import tasks
-import random
-from datetime import datetime, timedelta
-
-# متغيرات لتخزين البيانات
-user_xp = {}  # {user_id: {"xp": 0, "level": 0, "voice_time": 0}}
-voice_tracker = {}  # {user_id: {"start_time": timestamp, "channel_id": channel_id}}
-level_roles = {
-    1: "🎖️ Level 1",
-    2: "🎖️ Level 2",
-    3: "🎖️ Level 3",
-    5: "🎖️ Level 5",
-    7: "🎖️ Level 7",
-    10: "🎖️ Level 10",
-    15: "🎖️ Level 15",
-    20: "🎖️ Level 20",
-    25: "🎖️ Level 25",
-    30: "🎖️ Level 30",
-    40: "🎖️ Level 40",
-    50: "🎖️ Level 50",
-}
-
-# ==========================
-# 1️⃣ حساب النقاط (XP)
-# ==========================
-
-def get_xp(user_id):
-    """يجيب نقاط المستخدم"""
-    if str(user_id) not in user_xp:
-        user_xp[str(user_id)] = {"xp": 0, "level": 0, "voice_time": 0}
-    return user_xp[str(user_id)]
-
-def add_xp(user_id, amount):
-    """يزيد نقاط المستخدم"""
-    data = get_xp(user_id)
-    data["xp"] += amount
-    
-    # التحقق من الترقية
-    xp_needed = (data["level"] + 1) * 100  # 100 XP لكل مستوى
-    
-    if data["xp"] >= xp_needed:
-        data["xp"] = 0
-        data["level"] += 1
-        return True  # تم الترقية
-    return False
-
-# ==========================
-# 2️⃣ عند كتابة رسالة
-# ==========================
-
-@bot.event
-async def on_message(message):
-    if message.author.bot:
-        return
-    
-    if not message.guild:
-        return await bot.process_commands(message)
-    
-    # ===== نتحقق إذا كان العضو في روم AFK =====
-    if message.author.voice and message.author.voice.channel:
-        afk_channel = discord.utils.get(message.guild.voice_channels, name="├😴・𝙰𝚏𝚔")
-        if message.author.voice.channel == afk_channel:
-            # العضو في روم AFK → ما يتحسبش XP
-            return await bot.process_commands(message)
-    
-    # إضافة XP (1-3 نقاط عشوائية)
-    xp_gain = random.randint(1, 3)
-    leveled_up = add_xp(message.author.id, xp_gain)
-    
-    # إذا ترقى المستخدم
-    if leveled_up:
-        user_data = get_xp(message.author.id)
-        new_level = user_data["level"]
-        
-        # إعطاء رتبة
-        await give_rank(message.author, message.guild, new_level)
-        
-        # ===== نرسل رسالة الترقية في روم Level-Up =====
-        level_up_channel = discord.utils.get(message.guild.text_channels, name="└📊・𝐋𝐞𝐯𝐞𝐥-𝐔𝐏")
-        
-        # إذا مش موجود نعملو
-        if level_up_channel is None:
-            overwrites = {
-                message.guild.default_role: discord.PermissionOverwrite(send_messages=True, read_messages=True),
-                message.guild.me: discord.PermissionOverwrite(send_messages=True, read_messages=True)
-            }
-            level_up_channel = await message.guild.create_text_channel(
-                name="└📊・𝐋𝐞𝐯𝐞𝐥-𝐔𝐏",
-                overwrites=overwrites,
-                reason="تم إنشاء روم الترقيات"
-            )
-            print("✅ تم إنشاء روم Level-Up!")
-        
-        embed = discord.Embed(
-            title="🎉 Level Up!",
-            description=f"{message.author.mention} reached **Level {new_level}**!",
-            color=discord.Color.gold()
-        )
-        embed.set_thumbnail(url=message.author.display_avatar.url)
-        embed.set_footer(text="Keep going! 🚀")
-        
-        await level_up_channel.send(embed=embed)
-        
-        # نرسل DM للعضو
-        try:
-            dm_embed = discord.Embed(
-                title="🎉 You Leveled Up!",
-                description=f"Congratulations {message.author.name}! You reached **Level {new_level}**!",
-                color=discord.Color.gold()
-            )
-            await message.author.send(embed=dm_embed)
-        except:
-            pass
-    
-    await bot.process_commands(message)
-
-# ==========================
-# 3️⃣ إعطاء الرتب
-# ==========================
-
-async def give_rank(member, guild, level):
-    """يعطي رتبة حسب المستوى"""
-    
-    # نجيب الرتبة المناسبة
-    rank_name = None
-    for lvl, role_name in level_roles.items():
-        if level >= lvl:
-            rank_name = role_name
-    
-    if rank_name is None:
-        return
-    
-    # نجيب الرتبة من السيرفر
-    role = discord.utils.get(guild.roles, name=rank_name)
-    
-    # إذا مش موجودة نعملها
-    if role is None:
-        try:
-            # نعمل رتبة جديدة
-            role = await guild.create_role(
-                name=rank_name,
-                color=discord.Color.gold(),
-                reason=f"Level {level} reached"
-            )
-            print(f"✅ تم إنشاء رتبة: {rank_name}")
-        except:
-            return
-    
-    # نتحقق إذا العضو عنده الرتبة
-    if role in member.roles:
-        return
-    
-    try:
-        # نعطي الرتبة للعضو
-        await member.add_roles(role, reason=f"Reached Level {level}")
-        
-        # نرسل إشعار في الـ logs
-        log_channel = discord.utils.get(guild.text_channels, name="logs")
-        if log_channel:
-            await log_channel.send(f"🎖️ {member.mention} got role **{rank_name}** for Level {level}")
-            
-    except Exception as e:
-        print(f"❌ خطأ في إعطاء الرتبة: {e}")
-
-# ==========================
-# 4️⃣ نظام النقاط الصوتية (مع استثناء روم AFK)
-# ==========================
-
-@bot.event
-async def on_voice_state_update(member, before, after):
-    """يتبع وقت التواجد في الرومات الصوتية (ما عدا AFK)"""
-    
-    if member.bot:
-        return
-    
-    # ===== نتحقق إذا كان الروم الجديد هو AFK =====
-    afk_channel = discord.utils.get(member.guild.voice_channels, name="├😴・𝙰𝚏𝚔")
-    
-    # إذا دخل العضو لروم AFK → ما يتحسبش وقت
-    if after.channel == afk_channel:
-        if member.id in voice_tracker:
-            del voice_tracker[member.id]
-        return
-    
-    # إذا دخل العضو لروم صوتي (غير AFK)
-    if after.channel and before.channel is None:
-        voice_tracker[member.id] = {
-            "start_time": datetime.utcnow(),
-            "channel_id": after.channel.id
-        }
-        print(f"🔊 {member.display_name} دخل الروم الصوتي")
-    
-    # إذا خرج العضو من الروم الصوتي
-    elif before.channel and after.channel is None:
-        if member.id in voice_tracker:
-            # حساب الوقت
-            start_time = voice_tracker[member.id]["start_time"]
-            current_time = datetime.utcnow()
-            time_diff = (current_time - start_time).total_seconds()
-            
-            # كل 60 ثانية = 1 XP
-            xp_gain = int(time_diff // 60)
-            
-            if xp_gain > 0:
-                leveled_up = add_xp(member.id, xp_gain)
-                
-                # التحقق من الترقية
-                if leveled_up:
-                    user_data = get_xp(member.id)
-                    new_level = user_data["level"]
-                    
-                    await give_rank(member, member.guild, new_level)
-                    
-                    # ===== نرسل رسالة الترقية في روم Level-Up =====
-                    level_up_channel = discord.utils.get(member.guild.text_channels, name="└📊・𝐋𝐞𝐯𝐞𝐥-𝐔𝐏")
-                    
-                    if level_up_channel is None:
-                        overwrites = {
-                            member.guild.default_role: discord.PermissionOverwrite(send_messages=True, read_messages=True),
-                            member.guild.me: discord.PermissionOverwrite(send_messages=True, read_messages=True)
-                        }
-                        level_up_channel = await member.guild.create_text_channel(
-                            name="└📊・𝐋𝐞𝐯𝐞𝐥-𝐔𝐏",
-                            overwrites=overwrites,
-                            reason="تم إنشاء روم الترقيات"
-                        )
-                        print("✅ تم إنشاء روم Level-Up!")
-                    
-                    embed = discord.Embed(
-                        title="🎉 Level Up!",
-                        description=f"{member.mention} reached **Level {new_level}** from voice!",
-                        color=discord.Color.gold()
-                    )
-                    await level_up_channel.send(embed=embed)
-            
-            # حذف من التراكر
-            if member.id in voice_tracker:
-                del voice_tracker[member.id]
-            print(f"🔊 {member.display_name} خرج من الروم الصوتي")
-
-# ==========================
-# 5️⃣ تحديث النقاط كل 5 دقائق (للأعضاء في الرومات)
-# ==========================
-
-@tasks.loop(minutes=5)
-async def update_voice_xp():
-    """تحديث نقاط الأعضاء في الرومات الصوتية كل 5 دقائق (ما عدا AFK)"""
-    
-    current_time = datetime.utcnow()
-    afk_channel = None
-    
-    # نجيب روم AFK من أول سيرفر
-    for guild in bot.guilds:
-        afk_channel = discord.utils.get(guild.voice_channels, name="├😴・𝙰𝚏𝚔")
-        if afk_channel:
-            break
-    
-    for user_id, data in list(voice_tracker.items()):
-        start_time = data["start_time"]
-        time_diff = (current_time - start_time).total_seconds()
-        
-        # كل 5 دقائق = 5 XP
-        if time_diff >= 300:  # 5 دقائق
-            # نتحقق إذا كان العضو في روم AFK
-            member = None
-            for guild in bot.guilds:
-                member = guild.get_member(int(user_id))
-                if member and member.voice and member.voice.channel:
-                    if member.voice.channel == afk_channel:
-                        # العضو في AFK → ما نزيدش XP
-                        voice_tracker[user_id]["start_time"] = current_time
-                        continue
-                    break
-            
-            if member:
-                xp_gain = 5
-                leveled_up = add_xp(user_id, xp_gain)
-                
-                # تحديث وقت البداية
-                voice_tracker[user_id]["start_time"] = current_time
-                
-                if leveled_up:
-                    user_data = get_xp(user_id)
-                    new_level = user_data["level"]
-                    
-                    await give_rank(member, member.guild, new_level)
-                    
-                    # ===== نرسل رسالة الترقية في روم Level-Up =====
-                    level_up_channel = discord.utils.get(member.guild.text_channels, name="└📊・𝐋𝐞𝐯𝐞𝐥-𝐔𝐏")
-                    
-                    if level_up_channel is None:
-                        overwrites = {
-                            member.guild.default_role: discord.PermissionOverwrite(send_messages=True, read_messages=True),
-                            member.guild.me: discord.PermissionOverwrite(send_messages=True, read_messages=True)
-                        }
-                        level_up_channel = await member.guild.create_text_channel(
-                            name="└📊・𝐋𝐞𝐯𝐞𝐥-𝐔𝐏",
-                            overwrites=overwrites,
-                            reason="تم إنشاء روم الترقيات"
-                        )
-                        print("✅ تم إنشاء روم Level-Up!")
-                    
-                    embed = discord.Embed(
-                        title="🎉 Level Up!",
-                        description=f"{member.mention} reached **Level {new_level}** from voice!",
-                        color=discord.Color.gold()
-                    )
-                    await level_up_channel.send(embed=embed)
-
-# ==========================
-# 6️⃣ أمر !level (يعرض المستوى)
-# ==========================
-
-@bot.command()
-async def level(ctx, member: discord.Member = None):
-    """يعرض مستوى ونقاط العضو"""
-    
-    if member is None:
-        member = ctx.author
-    
-    data = get_xp(member.id)
-    level = data["level"]
-    xp = data["xp"]
-    xp_needed = (level + 1) * 100
-    
-    embed = discord.Embed(
-        title=f"📊 Level - {member.display_name}",
-        color=discord.Color.blue()
-    )
-    embed.set_thumbnail(url=member.display_avatar.url)
-    embed.add_field(name="🎯 Level", value=f"**{level}**", inline=True)
-    embed.add_field(name="⭐ XP", value=f"**{xp}** / {xp_needed}", inline=True)
-    embed.add_field(name="📊 Progress", value=f"{int((xp / xp_needed) * 100)}%", inline=True)
-    embed.set_footer(text="Keep chatting and staying in voice!")
-    
-    await ctx.send(embed=embed)
-
-# ==========================
-# 7️⃣ أمر !leaderboard_level (ترتيب المستويات)
-# ==========================
-
-@bot.command()
-async def leaderboard_level(ctx):
-    """يعرض ترتيب الأعضاء حسب المستوى"""
-    
-    if not user_xp:
-        return await ctx.send("📊 No data yet!")
-    
-    # نرتب حسب المستوى ثم النقاط
-    sorted_users = sorted(
-        user_xp.items(),
-        key=lambda x: (x[1]["level"], x[1]["xp"]),
-        reverse=True
-    )[:10]
-    
-    embed = discord.Embed(
-        title="🏆 Level Leaderboard",
-        description="Top 10 Members",
-        color=discord.Color.gold()
-    )
-    
-    description = ""
-    for i, (user_id, data) in enumerate(sorted_users, 1):
-        try:
-            user = await bot.fetch_user(int(user_id))
-            name = user.display_name
-        except:
-            name = f"Unknown User"
-        
-        level = data["level"]
-        xp = data["xp"]
-        
-        if i == 1:
-            medal = "🥇"
-        elif i == 2:
-            medal = "🥈"
-        elif i == 3:
-            medal = "🥉"
-        else:
-            medal = f"#{i}"
-        
-        description += f"{medal} **{name}** → Level **{level}** (XP: {xp})\n"
-    
-    embed.description = description
-    embed.set_footer(text=f"Requested by: {ctx.author.display_name}")
-    
-    await ctx.send(embed=embed)
-
-# ==========================
-# 8️⃣ أمر !reset_levels (للـ Owner فقط)
-# ==========================
-
-@bot.command()
-@commands.is_owner()
-async def reset_levels(ctx, member: discord.Member = None):
-    """يعيد ضبط مستويات عضو أو الكل"""
-    
-    if member:
-        if str(member.id) in user_xp:
-            user_xp[str(member.id)] = {"xp": 0, "level": 0, "voice_time": 0}
-            await ctx.send(f"✅ تم إعادة ضبط مستويات {member.mention}")
-        else:
-            await ctx.send(f"❌ {member.mention} ما عندوش بيانات")
-    else:
-        user_xp.clear()
-        await ctx.send("✅ تم إعادة ضبط كل المستويات")
-
-# ==========================
-# 9️⃣ بدء المهمة الخلفية
-# ==========================
-
-@bot.event
-async def on_ready():
-    # ... الكود الموجود ...
-    update_voice_xp.start()  # بدء تحديث النقاط الصوتية
-# ==========================
-# 🔧 إصلاح أوامر المستويات
-# ==========================
-
-@bot.command()
-@commands.has_permissions(administrator=True)
-async def set_role(ctx, role: discord.Role, level: int):
-    """يحدد رتبة لمستوى معين"""
-    try:
-        if level < 1:
-            return await ctx.send("❌ المستوى يجب أن يكون أكبر من 0!")
-        
-        level_roles[role.name] = level
-        save_data()
-        
-        embed = discord.Embed(
-            title="✅ Role Set!",
-            description=f"**{role.mention}** → Level **{level}**",
-            color=discord.Color.green()
-        )
-        await ctx.send(embed=embed)
-    except Exception as e:
-        await ctx.send(f"❌ خطأ: {str(e)}")
-
-@bot.command()
-@commands.has_permissions(administrator=True)
-async def remove_role(ctx, role: discord.Role):
-    """يحذف رتبة من نظام المستويات"""
-    try:
-        if role.name not in level_roles:
-            return await ctx.send(f"❌ {role.mention} غير موجودة!")
-        
-        del level_roles[role.name]
-        save_data()
-        
-        embed = discord.Embed(
-            title="✅ Role Removed!",
-            description=f"**{role.mention}** has been removed",
-            color=discord.Color.red()
-        )
-        await ctx.send(embed=embed)
-    except Exception as e:
-        await ctx.send(f"❌ خطأ: {str(e)}")
-
-@bot.command()
-async def level_roles(ctx):
-    """يعرض كل الرتب والمستويات"""
-    try:
-        if not level_roles:
-            return await ctx.send("📊 No roles set yet! Use `!set_role @role level`")
-        
-        embed = discord.Embed(
-            title="🎖️ Level Roles",
-            color=discord.Color.blue()
-        )
-        
-        description = ""
-        for role_name, level in sorted(level_roles.items(), key=lambda x: x[1]):
-            role = discord.utils.get(ctx.guild.roles, name=role_name)
-            if role:
-                description += f"{role.mention} → Level **{level}**\n"
-            else:
-                description += f"**{role_name}** → Level **{level}** (⚠️ Not found)\n"
-        
-        embed.description = description
-        embed.set_footer(text="Use !set_role @role level to add")
-        
-        await ctx.send(embed=embed)
-    except Exception as e:
-        await ctx.send(f"❌ خطأ: {str(e)}")
-# ==========================
-# RUN BOT
-# ==========================
-TOKEN = os.getenv('DISCORD_TOKEN')
-if TOKEN is None:
-    print("❌ Error: DISCORD_TOKEN not found!")
-    sys.exit(1)
-
-print("🚀 Starting bot...")
-keep_alive()
-print("🤖 Bot is starting...")
-try:
-    bot.run(TOKEN)
-except Exception as e:
-    print(f"❌ Bot error: {e}")
-    sys.exit(1)
+        return await ctx.send("❌ Please specify
