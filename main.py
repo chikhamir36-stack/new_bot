@@ -13,7 +13,7 @@ import random
 from typing import Optional
 from discord.ui import Button, View
 
-# =========================
+# ==========================
 # FLASK KEEP-ALIVE
 # ==========================
 app = Flask('')
@@ -305,11 +305,12 @@ async def load_invite_cache():
             invite_cache[guild.id] = {}
             for invite in invites:
                 invite_cache[guild.id][invite.code] = invite
+            await asyncio.sleep(0.5)
         except:
             pass
 
 # ==========================
-# 🎯 ON_READY
+# 🎯 ON_READY (مع تأخير لتجنب Rate Limit)
 # ==========================
 @bot.event
 async def on_ready():
@@ -318,6 +319,7 @@ async def on_ready():
     print(f"✅ Connected to {len(bot.guilds)} guilds")
     print(f"👑 Owner ID: {bot.owner_id}")
     
+    # تحميل الدعوات مع تأخير
     for guild in bot.guilds:
         try:
             invites = await guild.invites()
@@ -327,13 +329,24 @@ async def on_ready():
                     if inviter_id not in invite_data:
                         invite_data[inviter_id] = 0
                     invite_data[inviter_id] += invite.uses
+            await asyncio.sleep(1)
         except:
             pass
     print("📊 Invite data loaded!")
     
-    await load_invite_cache()
+    # تحميل الكاش مع تأخير
+    for guild in bot.guilds:
+        try:
+            invites = await guild.invites()
+            invite_cache[guild.id] = {}
+            for invite in invites:
+                invite_cache[guild.id][invite.code] = invite
+            await asyncio.sleep(0.5)
+        except:
+            pass
     print("📊 Invite cache loaded!")
     
+    # تحميل المستويات
     load_levels()
     update_voice_xp_level.start()
     print("🎵 Voice XP tracker started!")
