@@ -13,7 +13,7 @@ import random
 from typing import Optional
 from discord.ui import Button, View
 
-# ==========================
+# =========================
 # FLASK KEEP-ALIVE
 # ==========================
 app = Flask('')
